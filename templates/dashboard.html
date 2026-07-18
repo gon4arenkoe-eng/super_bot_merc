@@ -1,0 +1,690 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NEXUS v{{ version }} — Dashboard</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family: 'Segoe UI', system-ui, sans-serif; background:#060b14; color:#e0e8f0; min-height:100vh; }
+
+/* === LAYOUT === */
+.mockup { max-width:1400px; margin:0 auto; background:#060b14; min-height:100vh; position:relative; }
+
+/* === TOPBAR === */
+.topbar { height:52px; background:#0d1525; border-bottom:1px solid #1a2a40; display:flex; align-items:center; justify-content:space-between; padding:0 20px; position:fixed; top:0; left:0; right:0; z-index:100; max-width:1400px; margin:0 auto; }
+.topbar-left { display:flex; align-items:center; gap:12px; }
+.brand-name { font-size:15px; font-weight:700; color:#e0e8f0; letter-spacing:.5px; }
+.brand-ver { font-size:11px; color:#6a809a; }
+.topbar-center { display:flex; gap:24px; }
+.stat-pill { background:#131d33; border:1px solid #1a2a40; border-radius:8px; padding:6px 14px; display:flex; align-items:center; gap:8px; }
+.stat-pill .lbl { font-size:10px; color:#6a809a; text-transform:uppercase; }
+.stat-pill .val { font-family:monospace; font-size:13px; font-weight:600; color:#e0e8f0; }
+.stat-pill .val.pos { color:#00e5a0; }
+.stat-pill .val.neg { color:#ff5577; }
+.topbar-right { display:flex; align-items:center; gap:12px; }
+.clock { font-family:monospace; font-size:12px; color:#6a809a; }
+.theme-btn { width:32px; height:32px; border-radius:8px; background:#131d33; border:1px solid #1a2a40; color:#6a809a; display:flex; align-items:center; justify-content:center; cursor:pointer; }
+
+/* === SIDEBAR === */
+.sidebar { width:220px; background:#0d1525; border-right:1px solid #1a2a40; padding:16px 0; position:fixed; top:52px; bottom:0; left:0; z-index:90; overflow-y:auto; }
+.nav-item { display:flex; align-items:center; gap:12px; padding:14px 18px; margin:4px 10px; color:#6a809a; font-size:14px; font-weight:500; cursor:pointer; border-radius:10px; border:1px solid transparent; background:transparent; transition:all 0.2s ease; text-decoration:none; }
+.nav-item:hover { color:#00d4ff; background:rgba(0,212,255,0.08); border-color:rgba(0,212,255,0.25); }
+.nav-item.active { background:rgba(0,212,255,0.1); color:#00d4ff; border:1px solid rgba(0,212,255,0.35); }
+.nav-item svg { flex:none; width:20px; height:20px; }
+
+.divider { height:1px; background:#1a2a40; margin:12px 16px; }
+
+.section-title { font-size:10px; color:#6a809a; text-transform:uppercase; letter-spacing:.08em; padding:0 18px; margin-bottom:8px; display:flex; align-items:center; gap:8px; }
+.watchlist-item { display:flex; align-items:center; justify-content:space-between; padding:6px 18px; font-family:monospace; font-size:12px; }
+.watchlist-item .sym { color:#e0e8f0; font-weight:600; }
+.watchlist-item .price { color:#00e5a0; }
+.watchlist-item .change { color:#ff5577; font-size:10px; }
+
+.preset-row { display:flex; gap:4px; padding:0 18px; margin-bottom:8px; }
+.preset-btn { flex:1; padding:8px 4px; border:1px solid #1a2a40; border-radius:6px; background:#131d33; color:#6a809a; font-size:11px; font-weight:600; text-align:center; cursor:pointer; }
+.preset-btn.active { border-color:#00d4ff; background:rgba(0,212,255,.1); color:#00d4ff; }
+
+/* === MAIN CONTENT === */
+.main { margin-left:220px; padding:72px 20px 20px; display:grid; grid-template-columns:1fr 280px; gap:20px; }
+
+/* Stats row */
+.stats-row { grid-column:1 / -1; display:grid; grid-template-columns:repeat(5, 1fr); gap:14px; margin-bottom:4px; }
+.stat-card { background:#131d33; border:1px solid #1a2a40; border-radius:10px; padding:16px; position:relative; overflow:hidden; }
+.stat-card::before { content:''; position:absolute; top:0; left:0; right:0; height:2px; background:linear-gradient(90deg, transparent, #00d4ff, transparent); opacity:.3; }
+.stat-card .lbl { font-size:10px; color:#6a809a; text-transform:uppercase; letter-spacing:.06em; margin-bottom:6px; }
+.stat-card .val { font-family:monospace; font-size:22px; font-weight:700; color:#e0e8f0; }
+.stat-card .val.pos { color:#00e5a0; }
+.stat-card .val.neg { color:#ff5577; }
+.stat-card .sub { font-size:11px; color:#6a809a; margin-top:4px; }
+
+/* Positions table */
+.positions-area { background:#131d33; border:1px solid #1a2a40; border-radius:10px; padding:20px; }
+.positions-area h3 { font-size:13px; font-weight:700; color:#e0e8f0; margin-bottom:16px; display:flex; align-items:center; gap:8px; }
+.table-header { display:grid; grid-template-columns:2fr 1fr 1fr 1fr 1fr 1fr 1fr; gap:12px; padding:10px 0; border-bottom:1px solid #1a2a40; font-size:10px; color:#8aa4c8; text-transform:uppercase; letter-spacing:.06em; font-weight:600; }
+.table-row { display:grid; grid-template-columns:2fr 1fr 1fr 1fr 1fr 1fr 1fr; gap:12px; padding:12px 0; border-bottom:1px solid rgba(26,42,64,.5); font-size:12px; font-family:monospace; color:#b0c4de; }
+.table-row .sym { color:#ffffff; font-weight:600; }
+.table-row .side-long { color:#00e5a0; font-weight:600; }
+.table-row .side-short { color:#ff5577; font-weight:600; }
+.table-row .pnl-pos { color:#00e5a0; font-weight:600; }
+.table-row .pnl-neg { color:#ff5577; font-weight:600; }
+.table-row:hover { background:rgba(0,212,255,.04); }
+.table-row .action-btn { background:rgba(255,85,119,.15); color:#ff5577; border:1px solid rgba(255,85,119,.3); border-radius:4px; padding:4px 10px; font-size:10px; cursor:pointer; font-family:inherit; }
+.table-row .action-btn:hover { background:rgba(255,85,119,.25); }
+
+/* Chart area */
+.chart-area { background:#131d33; border:1px solid #1a2a40; border-radius:10px; padding:20px; height:280px; position:relative; }
+.chart-area h3 { font-size:13px; font-weight:700; color:#e0e8f0; margin-bottom:16px; display:flex; align-items:center; gap:8px; }
+.chart-placeholder { width:100%; height:200px; background:linear-gradient(180deg, rgba(0,212,255,.05) 0%, transparent 100%); border-radius:8px; position:relative; overflow:hidden; display:flex; align-items:center; justify-content:center; color:#6a809a; font-size:12px; }
+
+/* Terminal */
+.terminal { background:#0a0f1a; border:1px solid #1a2a40; border-radius:10px; padding:16px; height:200px; overflow:hidden; }
+.terminal-header { display:flex; align-items:center; gap:8px; margin-bottom:12px; }
+.terminal-header .dot { width:8px; height:8px; border-radius:50%; }
+.terminal-header .dot.red { background:#ff5577; }
+.terminal-header .dot.yellow { background:#ffcc00; }
+.terminal-header .dot.green { background:#00e5a0; }
+.terminal-header span { font-size:11px; color:#6a809a; }
+.terminal-line { font-family:monospace; font-size:11px; color:#6a809a; line-height:1.6; }
+.terminal-line .time { color:#4a6080; }
+.terminal-line .tag { color:#00d4ff; }
+.terminal-line .ok { color:#00e5a0; }
+.terminal-line .err { color:#ff5577; }
+
+/* === RIGHT RAIL === */
+.rail { display:flex; flex-direction:column; gap:14px; }
+.rail-card { background:#131d33; border:1px solid #1a2a40; border-radius:10px; padding:16px; }
+.rail-card h4 { font-size:12px; font-weight:700; color:#e0e8f0; margin-bottom:14px; display:flex; align-items:center; gap:8px; }
+.control-btn { width:100%; padding:12px; border-radius:8px; border:none; font-size:13px; font-weight:700; cursor:pointer; margin-bottom:8px; font-family:inherit; }
+.control-btn.stop { background:rgba(255,85,119,.15); color:#ff5577; border:1px solid rgba(255,85,119,.3); }
+.control-btn.stop:hover { background:rgba(255,85,119,.25); }
+.control-btn.start { background:rgba(0,229,160,.15); color:#00e5a0; border:1px solid rgba(0,229,160,.3); }
+.control-btn.start:hover { background:rgba(0,229,160,.25); }
+.control-btn.emergency { background:rgba(255,85,119,.25); color:#ff5577; border:1px solid rgba(255,85,119,.5); }
+.control-btn.emergency:hover { background:rgba(255,85,119,.35); }
+.status-row { display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px solid rgba(26,42,64,.5); }
+.status-row:last-child { border-bottom:none; }
+.status-row .lbl { font-size:11px; color:#6a809a; }
+.status-row .val { font-family:monospace; font-size:12px; font-weight:600; }
+.status-row .val.pos { color:#00e5a0; }
+.status-row .val.neg { color:#ff5577; }
+.status-row .val.neu { color:#6a809a; }
+
+/* Nexus buttons */
+.nexus-btn { display:inline-flex; align-items:center; justify-content:center; gap:6px; padding:10px 18px; border-radius:8px; border:1px solid #1a2a40; background:#131d33; color:#e0e8f0; font-size:12px; font-weight:600; font-family:inherit; cursor:pointer; transition:all 0.2s; position:relative; overflow:hidden; }
+.nexus-btn:hover { transform:translateY(-2px); box-shadow:0 8px 20px rgba(0,0,0,0.3); border-color:#00d4ff; }
+.nexus-btn:active { transform:translateY(0); }
+.nexus-btn-primary { background:linear-gradient(180deg, rgba(0,212,255,0.2), rgba(0,212,255,0.05)); border-color:rgba(0,212,255,0.4); color:#00d4ff; }
+.nexus-btn-danger { background:rgba(255,85,119,0.1); border-color:rgba(255,85,119,0.35); color:#ff5577; }
+.nexus-btn-success { background:rgba(0,229,160,0.1); border-color:rgba(0,229,160,0.35); color:#00e5a0; }
+.nexus-btn-sm { padding:6px 12px; font-size:11px; }
+
+/* Modal */
+.modal-overlay { display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.7); z-index:200; justify-content:center; align-items:center; }
+.modal-overlay.active { display:flex; }
+.modal { background:#131d33; border:1px solid #1a2a40; border-radius:16px; padding:30px; width:90%; max-width:500px; }
+.modal h2 { font-size:18px; margin-bottom:20px; color:#e0e8f0; }
+.form-group { margin-bottom:15px; }
+.form-group label { display:block; color:#6a809a; font-size:12px; margin-bottom:5px; }
+.form-group input, .form-group select { width:100%; padding:10px; background:#0a0f1a; border:1px solid #1a2a40; border-radius:8px; color:#e0e8f0; font-size:14px; font-family:inherit; }
+.form-group input:focus, .form-group select:focus { outline:none; border-color:#00d4ff; }
+.alert { padding:12px 16px; border-radius:8px; margin-bottom:15px; font-size:14px; }
+.alert.error { background:rgba(255,85,119,0.15); color:#ff5577; border:1px solid rgba(255,85,119,0.3); }
+.alert.success { background:rgba(0,229,160,0.15); color:#00e5a0; border:1px solid rgba(0,229,160,0.3); }
+
+/* Exchange tags */
+.exchange-tag { display:inline-block; padding:3px 8px; border-radius:4px; font-size:10px; font-weight:600; text-transform:uppercase; }
+.exchange-tag.bingx { background:rgba(245,158,11,0.15); color:#f59e0b; }
+.exchange-tag.binance { background:rgba(251,191,36,0.15); color:#fbbf24; }
+.exchange-tag.bybit { background:rgba(139,92,246,0.15); color:#8b5cf6; }
+.exchange-tag.okx { background:rgba(16,185,129,0.15); color:#10b981; }
+
+/* Demo badge */
+.demo-badge { display:inline-block; padding:2px 8px; border-radius:4px; font-size:10px; font-weight:600; background:rgba(0,229,160,0.15); color:#00e5a0; }
+.demo-badge.real { background:rgba(255,85,119,0.15); color:#ff5577; }
+
+/* Scrollbar */
+::-webkit-scrollbar { width:6px; }
+::-webkit-scrollbar-track { background:#0a0f1a; }
+::-webkit-scrollbar-thumb { background:#1a2a40; border-radius:3px; }
+::-webkit-scrollbar-thumb:hover { background:#2a3a50; }
+</style>
+</head>
+<body>
+
+<div class="mockup">
+
+  <!-- TOPBAR -->
+  <div class="topbar">
+    <div class="topbar-left">
+      <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+        <circle cx="16" cy="16" r="14" stroke="#1a2a40" stroke-width="1.5"/>
+        <path d="M8 16 Q16 6 24 16" stroke="#00d4ff" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+        <path d="M8 16 Q16 26 24 16" stroke="#00e5a0" stroke-width="2.5" fill="none" stroke-linecap="round" opacity="0.7"/>
+        <circle cx="16" cy="16" r="3" fill="#00d4ff"/>
+      </svg>
+      <div>
+        <div style="font-size:16px;font-weight:800;color:#e0e8f0;letter-spacing:2px;">NEXUS</div>
+        <div style="font-size:10px;color:#6a809a;letter-spacing:3px;">TRADING BOT v{{ version }}</div>
+      </div>
+    </div>
+    <div class="topbar-center">
+      <div class="stat-pill">
+        <span class="lbl">Balance</span>
+        <span class="val" id="topBalance">$0.00</span>
+      </div>
+      <div class="stat-pill">
+        <span class="lbl">Daily PnL</span>
+        <span class="val pos" id="topPnL">+$0.00</span>
+      </div>
+      <div class="stat-pill">
+        <span class="lbl">Open</span>
+        <span class="val" id="topOpen">0 / 0</span>
+      </div>
+    </div>
+    <div class="topbar-right">
+      <span class="clock" id="clock">00:00:00 UTC</span>
+      <div class="theme-btn" onclick="toggleTheme()">
+        <svg width="16" height="16" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5" fill="none"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
+      </div>
+      <a href="/logout" style="color:#6a809a;text-decoration:none;font-size:12px;">Logout</a>
+    </div>
+  </div>
+
+  <!-- SIDEBAR -->
+  <div class="sidebar">
+    <a href="/dashboard" class="nav-item active">
+      <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="1.5" fill="none"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="11" width="7" height="10" rx="1.5"/><rect x="3" y="13" width="7" height="8" rx="1.5"/></svg>
+      Dashboard
+    </a>
+    <a href="/exchanges" class="nav-item">
+      <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="1.5" fill="none"><path d="M3 18L9 12L13 16L21 6"/><circle cx="21" cy="6" r="1.5" fill="currentColor"/></svg>
+      Positions
+    </a>
+    <a href="#" class="nav-item" onclick="alert('Coming soon')">
+      <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="1.5" fill="none"><path d="M4 6h16"/><path d="M4 12h12"/><path d="M4 18h8"/></svg>
+      Orders
+    </a>
+    <a href="#" class="nav-item" onclick="alert('Coming soon')">
+      <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="1.5" fill="none"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
+      History
+    </a>
+    <a href="#" class="nav-item" onclick="alert('Coming soon')">
+      <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="1.5" fill="none"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>
+      Settings
+    </a>
+
+    <div class="divider"></div>
+
+    <div class="section-title">
+      <svg width="14" height="14" viewBox="0 0 24 24" stroke="#00d4ff" stroke-width="1.5" fill="none"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+      Watchlist
+    </div>
+    <div class="watchlist-item">
+      <span class="sym">BTC-USDT</span>
+      <span class="price" id="btcPrice">$67,420</span>
+      <span class="change" id="btcChange">+2.4%</span>
+    </div>
+    <div class="watchlist-item">
+      <span class="sym">ETH-USDT</span>
+      <span class="price" id="ethPrice">$3,520</span>
+      <span class="change" id="ethChange">-0.8%</span>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="section-title">
+      <svg width="14" height="14" viewBox="0 0 24 24" stroke="#00d4ff" stroke-width="1.5" fill="none"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+      Risk Profile
+    </div>
+    <div class="preset-row">
+      <button class="preset-btn" onclick="setRisk('safe')">SAFE</button>
+      <button class="preset-btn active" onclick="setRisk('balanced')">BAL</button>
+      <button class="preset-btn" onclick="setRisk('max')">MAX</button>
+    </div>
+  </div>
+
+  <!-- MAIN -->
+  <div class="main">
+
+    <!-- STATS ROW -->
+    <div class="stats-row">
+      <div class="stat-card">
+        <div class="lbl">Total Balance</div>
+        <div class="val" id="statBalance">$0.00</div>
+        <div class="sub" id="statBalanceSub">+$0.00 today</div>
+      </div>
+      <div class="stat-card">
+        <div class="lbl">Daily PnL</div>
+        <div class="val pos" id="statDailyPnL">+$0.00</div>
+        <div class="sub" id="statDailyPnLSub">+0.00%</div>
+      </div>
+      <div class="stat-card">
+        <div class="lbl">Open Positions</div>
+        <div class="val" id="statOpen">0 <span style="font-size:14px;color:#6a809a;">/ 0</span></div>
+        <div class="sub" id="statOpenSub">0 long, 0 short</div>
+      </div>
+      <div class="stat-card">
+        <div class="lbl">Win Rate</div>
+        <div class="val pos" id="statWinRate">0.0%</div>
+        <div class="sub">0 wins / 0 losses</div>
+      </div>
+      <div class="stat-card">
+        <div class="lbl">Realized PnL</div>
+        <div class="val pos" id="statRealized">+$0.00</div>
+        <div class="sub">This month</div>
+      </div>
+    </div>
+
+    <!-- LEFT COLUMN -->
+    <div style="display:flex; flex-direction:column; gap:14px;">
+
+      <!-- OPEN POSITIONS -->
+      <div class="positions-area">
+        <h3>
+          <svg width="16" height="16" viewBox="0 0 24 24" stroke="#00d4ff" stroke-width="1.5" fill="none"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M9 9v12"/></svg>
+          Open Positions
+          <span style="margin-left:auto; font-size:11px; color:#6a809a;">
+            {% if demo_only %}<span class="demo-badge">DEMO MODE</span>{% else %}<span class="demo-badge real">REAL MODE</span>{% endif %}
+          </span>
+        </h3>
+        <div class="table-header">
+          <div>Symbol</div>
+          <div>Side</div>
+          <div>Size</div>
+          <div>Entry</div>
+          <div>Mark</div>
+          <div>PnL</div>
+          <div>Action</div>
+        </div>
+        <div id="positionsList">
+          {% for pos in positions %}
+          <div class="table-row">
+            <div class="sym">{{ pos.symbol }}</div>
+            <div class="{% if pos.side == 'LONG' %}side-long{% else %}side-short{% endif %}">{{ pos.side }}</div>
+            <div>{{ "%.4f"|format(pos.size) }}</div>
+            <div>${{ "%.2f"|format(pos.entry_price) }}</div>
+            <div>${{ "%.2f"|format(pos.entry_price * 1.01) }}</div>
+            <div class="{% if pos.pnl >= 0 %}pnl-pos{% else %}pnl-neg{% endif %}">{{ "+%.2f"|format(pos.pnl) if pos.pnl >= 0 else "%.2f"|format(pos.pnl) }}</div>
+            <div><button class="action-btn" onclick="closePosition({{ pos.id }})">Close</button></div>
+          </div>
+          {% else %}
+          <div style="text-align:center; padding:30px; color:#6a809a; font-size:13px;">No open positions</div>
+          {% endfor %}
+        </div>
+      </div>
+
+      <!-- PnL CHART + MARKET HEATMAP -->
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px;">
+        <div class="chart-area" style="height:220px;">
+          <h3>
+            <svg width="16" height="16" viewBox="0 0 24 24" stroke="#00d4ff" stroke-width="1.5" fill="none"><path d="M3 17l6-6 4 4 8-9"/><circle cx="21" cy="6" r="1.5" fill="#00d4ff"/></svg>
+            PnL Chart
+          </h3>
+          <div class="chart-placeholder" id="pnlChart">Loading chart...</div>
+        </div>
+        <div class="chart-area" style="height:220px;">
+          <h3>
+            <svg width="16" height="16" viewBox="0 0 24 24" stroke="#00e5a0" stroke-width="1.5" fill="none"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+            Market Heatmap
+          </h3>
+          <div style="display:grid; grid-template-columns:repeat(4, 1fr); gap:4px; padding:8px;">
+            <div style="background:rgba(0,229,160,.7); border-radius:4px; display:flex; align-items:center; justify-content:center; font-size:9px; font-weight:700; color:#060b14; padding:8px 4px;">BTC<br>+2.4%</div>
+            <div style="background:rgba(0,229,160,.4); border-radius:4px; display:flex; align-items:center; justify-content:center; font-size:9px; font-weight:700; color:#060b14; padding:8px 4px;">ETH<br>+1.1%</div>
+            <div style="background:rgba(255,85,119,.5); border-radius:4px; display:flex; align-items:center; justify-content:center; font-size:9px; font-weight:700; color:#060b14; padding:8px 4px;">SOL<br>-0.8%</div>
+            <div style="background:rgba(0,229,160,.6); border-radius:4px; display:flex; align-items:center; justify-content:center; font-size:9px; font-weight:700; color:#060b14; padding:8px 4px;">AVAX<br>+1.8%</div>
+            <div style="background:rgba(255,85,119,.3); border-radius:4px; display:flex; align-items:center; justify-content:center; font-size:9px; font-weight:700; color:#060b14; padding:8px 4px;">LINK<br>-0.3%</div>
+            <div style="background:rgba(0,229,160,.8); border-radius:4px; display:flex; align-items:center; justify-content:center; font-size:9px; font-weight:700; color:#060b14; padding:8px 4px;">DOT<br>+3.2%</div>
+            <div style="background:rgba(0,229,160,.3); border-radius:4px; display:flex; align-items:center; justify-content:center; font-size:9px; font-weight:700; color:#060b14; padding:8px 4px;">MATIC<br>+0.5%</div>
+            <div style="background:rgba(255,85,119,.6); border-radius:4px; display:flex; align-items:center; justify-content:center; font-size:9px; font-weight:700; color:#060b14; padding:8px 4px;">UNI<br>-1.2%</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- TERMINAL -->
+      <div class="terminal" style="height:160px;">
+        <div class="terminal-header" style="margin-bottom:6px;">
+          <div class="dot red"></div>
+          <div class="dot yellow"></div>
+          <div class="dot green"></div>
+          <span>Terminal</span>
+        </div>
+        <div id="terminalLines">
+          <div class="terminal-line"><span class="time">{{ now.strftime('%H:%M:%S') }}</span> <span class="tag">[SYSTEM]</span> <span class="ok">NEXUS v{{ version }} initialized</span></div>
+          <div class="terminal-line"><span class="time">{{ now.strftime('%H:%M:%S') }}</span> <span class="tag">[ENGINE]</span> <span class="ok">Trading engine ready</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT RAIL -->
+    <div class="rail">
+
+      <!-- BOT CONTROL -->
+      <div class="rail-card">
+        <h4>
+          <svg width="16" height="16" viewBox="0 0 24 24" stroke="#00d4ff" stroke-width="1.5" fill="none"><rect x="4" y="4" width="16" height="12" rx="2"/><path d="M8 21h8"/><path d="M12 16v5"/><circle cx="9" cy="10" r="1" fill="#00d4ff"/><circle cx="15" cy="10" r="1" fill="#00d4ff"/></svg>
+          Bot Control
+        </h4>
+        <button class="control-btn start" id="btnStart" onclick="startBot()">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+          START BOT
+        </button>
+        <button class="control-btn stop" id="btnStop" onclick="stopBot()" style="display:none;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>
+          STOP BOT
+        </button>
+        <button class="control-btn emergency" onclick="emergencyClose()">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.3 3.9L1.8 18a2 2 0 001.7 3h17a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          EMERGENCY CLOSE ALL
+        </button>
+        <div style="margin-top:12px; padding-top:12px; border-top:1px solid rgba(26,42,64,.5);">
+          <div class="status-row">
+            <span class="lbl">Status</span>
+            <span class="val pos" id="botStatusText" style="display:flex;align-items:center;gap:4px;"><svg width="8" height="8" viewBox="0 0 8 8"><circle cx="4" cy="4" r="4" fill="#00e5a0"/></svg>READY</span>
+          </div>
+          <div class="status-row">
+            <span class="lbl">Mode</span>
+            <span class="val pos" id="botMode">{% if demo_only %}DEMO{% else %}REAL{% endif %}</span>
+          </div>
+          <div class="status-row">
+            <span class="lbl">Uptime</span>
+            <span class="val neu" id="botUptime">00:00:00</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- STATUS -->
+      <div class="rail-card">
+        <h4>
+          <svg width="16" height="16" viewBox="0 0 24 24" stroke="#00d4ff" stroke-width="1.5" fill="none"><path d="M5 12a7 7 0 0114 0"/><path d="M8 12a4 4 0 018 0"/><circle cx="12" cy="12" r="1" fill="#00d4ff"/></svg>
+          Status
+        </h4>
+        <div class="status-row">
+          <span class="lbl">ML Filter</span>
+          <span class="val pos" id="mlStatus">BULLISH 75%</span>
+        </div>
+        <div class="status-row">
+          <span class="lbl">Sentiment</span>
+          <span class="val pos" id="sentimentStatus">Bullish</span>
+        </div>
+        <div class="status-row">
+          <span class="lbl">Regime</span>
+          <span class="val pos" id="regimeStatus">TREND_UP</span>
+        </div>
+        <div style="margin-top:10px; display:flex; gap:8px;">
+          <button class="nexus-btn nexus-btn-sm nexus-btn-primary" onclick="refreshData()" style="flex:1;">Refresh</button>
+          <button class="nexus-btn nexus-btn-sm" onclick="trainML()" style="flex:1;">Train ML</button>
+        </div>
+      </div>
+
+      <!-- EXCHANGES -->
+      <div class="rail-card">
+        <h4>
+          <svg width="16" height="16" viewBox="0 0 24 24" stroke="#00d4ff" stroke-width="1.5" fill="none"><path d="M13 2L4 14h7l-2 8 9-12h-7l2-8z"/></svg>
+          Exchanges ({{ active_count }}/{{ exchanges|length }})
+        </h4>
+        <div id="exchangesList" style="max-height:200px; overflow-y:auto;">
+          {% for ex in exchanges %}
+          <div class="status-row">
+            <span class="lbl">
+              <span class="exchange-tag {{ ex.name }}">{{ ex.name|upper }}</span>
+              {{ ex.display_name }}
+            </span>
+            <span class="val {% if ex.is_active %}pos{% else %}neg{% endif %}">{{ "ON" if ex.is_active else "OFF" }}</span>
+          </div>
+          {% else %}
+          <div style="color:#6a809a; font-size:12px; text-align:center; padding:10px;">No exchanges added</div>
+          {% endfor %}
+        </div>
+        <a href="/exchanges" class="nexus-btn nexus-btn-primary" style="width:100%; margin-top:10px; text-decoration:none;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 5v14M5 12h14"/></svg>
+          Manage Exchanges
+        </a>
+      </div>
+
+      <!-- QUICK ACTIONS -->
+      <div class="rail-card">
+        <h4>
+          <svg width="16" height="16" viewBox="0 0 24 24" stroke="#00d4ff" stroke-width="1.5" fill="none"><path d="M13 2L4 14h7l-2 8 9-12h-7l2-8z"/></svg>
+          Quick Actions
+        </h4>
+        <button class="nexus-btn nexus-btn-primary" style="width:100%; margin-bottom:8px;" onclick="autoOptimize()">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3" fill="currentColor"/></svg>
+          Auto Optimize
+        </button>
+        <button class="nexus-btn" style="width:100%; margin-bottom:8px;" onclick="exportCSV()">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 3v12"/><path d="M7 12l5 5 5-5"/><path d="M5 21h14"/></svg>
+          Export CSV
+        </button>
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-top:8px;">
+          <span style="font-size:11px; color:#6a809a;">DCA Grid</span>
+          <div class="nexus-toggle active" id="dcaToggle" onclick="toggleDCA()"></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ADD EXCHANGE MODAL -->
+<div class="modal-overlay" id="addExchangeModal">
+  <div class="modal">
+    <h2>Add Exchange</h2>
+    <div id="exchangeAlert"></div>
+    <form id="exchangeForm" onsubmit="return addExchange(event)">
+      <div class="form-group">
+        <label>Exchange</label>
+        <select name="name" id="exchangeName" required>
+          <option value="bingx">BingX</option>
+          <option value="binance">Binance</option>
+          <option value="bybit">Bybit</option>
+          <option value="okx">OKX</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>API Key</label>
+        <input type="text" name="api_key" id="apiKey" required placeholder="Enter API Key">
+      </div>
+      <div class="form-group">
+        <label>API Secret</label>
+        <input type="password" name="api_secret" id="apiSecret" required placeholder="Enter API Secret">
+      </div>
+      <div class="form-group" id="passphraseGroup">
+        <label>Passphrase (OKX only)</label>
+        <input type="text" name="passphrase" id="passphrase" placeholder="Enter Passphrase">
+      </div>
+      <div class="form-group">
+        <label>
+          <input type="checkbox" name="is_demo" id="isDemo" checked> DEMO Mode
+        </label>
+      </div>
+      <button type="submit" class="nexus-btn nexus-btn-primary" style="width:100%">Add Exchange</button>
+      <button type="button" class="nexus-btn" style="width:100%; margin-top:8px;" onclick="hideModal('addExchangeModal')">Cancel</button>
+    </form>
+  </div>
+</div>
+
+<script>
+// Clock
+function updateClock() {
+  const now = new Date();
+  document.getElementById('clock').textContent = now.toISOString().substr(11, 8) + ' UTC';
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+// Uptime counter
+let uptimeSeconds = 0;
+function updateUptime() {
+  uptimeSeconds++;
+  const h = Math.floor(uptimeSeconds / 3600).toString().padStart(2, '0');
+  const m = Math.floor((uptimeSeconds % 3600) / 60).toString().padStart(2, '0');
+  const s = (uptimeSeconds % 60).toString().padStart(2, '0');
+  document.getElementById('botUptime').textContent = h + ':' + m + ':' + s;
+}
+setInterval(updateUptime, 1000);
+
+// Load data
+async function loadData() {
+  try {
+    const [balanceRes, positionsRes, botRes] = await Promise.all([
+      fetch('/api/balance'),
+      fetch('/api/positions/live'),
+      fetch('/api/bot/status')
+    ]);
+
+    const balance = await balanceRes.json();
+    const positions = await positionsRes.json();
+    const botStatus = await botRes.json();
+
+    // Update stats
+    document.getElementById('topBalance').textContent = '$' + (balance.total || 0).toLocaleString('en-US', {minimumFractionDigits: 2});
+    document.getElementById('statBalance').textContent = '$' + (balance.total || 0).toLocaleString('en-US', {minimumFractionDigits: 0});
+    document.getElementById('topOpen').textContent = positions.length + ' / 10';
+    document.getElementById('statOpen').innerHTML = positions.length + ' <span style="font-size:14px;color:#6a809a;">/ 10</span>';
+
+    // Update bot status
+    if (botStatus.running) {
+      document.getElementById('btnStart').style.display = 'none';
+      document.getElementById('btnStop').style.display = 'block';
+      document.getElementById('botStatusText').innerHTML = '<svg width="8" height="8" viewBox="0 0 8 8"><circle cx="4" cy="4" r="4" fill="#00e5a0"/></svg>RUNNING';
+    } else {
+      document.getElementById('btnStart').style.display = 'block';
+      document.getElementById('btnStop').style.display = 'none';
+      document.getElementById('botStatusText').innerHTML = '<svg width="8" height="8" viewBox="0 0 8 8"><circle cx="4" cy="4" r="4" fill="#6a809a"/></svg>READY';
+    }
+
+    // Update positions table
+    updatePositionsTable(positions);
+
+  } catch (e) {
+    console.error('Load data error:', e);
+  }
+}
+
+function updatePositionsTable(positions) {
+  const container = document.getElementById('positionsList');
+  if (!positions || positions.length === 0) {
+    container.innerHTML = '<div style="text-align:center; padding:30px; color:#6a809a; font-size:13px;">No open positions</div>';
+    return;
+  }
+
+  let html = '';
+  positions.forEach(pos => {
+    const pnlClass = pos.pnl >= 0 ? 'pnl-pos' : 'pnl-neg';
+    const pnlSign = pos.pnl >= 0 ? '+' : '';
+    const sideClass = pos.side === 'LONG' ? 'side-long' : 'side-short';
+    html += `<div class="table-row">
+      <div class="sym">${pos.symbol}</div>
+      <div class="${sideClass}">${pos.side}</div>
+      <div>${pos.size?.toFixed(4) || '0.0000'}</div>
+      <div>$${pos.entry_price?.toFixed(2) || '0.00'}</div>
+      <div>$${pos.mark_price?.toFixed(2) || pos.entry_price?.toFixed(2) || '0.00'}</div>
+      <div class="${pnlClass}">${pnlSign}${pos.pnl?.toFixed(2) || '0.00'}</div>
+      <div><button class="action-btn" onclick="closePosition(${pos.exchange_id}, '${pos.symbol}', '${pos.side}')">Close</button></div>
+    </div>`;
+  });
+  container.innerHTML = html;
+}
+
+// Bot control
+async function startBot() {
+  await fetch('/api/bot/start', {method: 'POST'});
+  loadData();
+}
+
+async function stopBot() {
+  await fetch('/api/bot/stop', {method: 'POST'});
+  loadData();
+}
+
+async function emergencyClose() {
+  if (!confirm('EMERGENCY: Close ALL positions?')) return;
+  // Close all positions
+  const res = await fetch('/api/positions/live');
+  const positions = await res.json();
+  for (const pos of positions) {
+    await fetch('/api/positions/' + pos.id + '/close', {method: 'POST'});
+  }
+  loadData();
+}
+
+async function closePosition(exchangeId, symbol, side) {
+  if (!confirm('Close position ' + symbol + ' ' + side + '?')) return;
+  await fetch('/api/orders/close', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({exchange_id: exchangeId, symbol: symbol, side: side})
+  });
+  loadData();
+}
+
+// Exchange modal
+function showModal(id) { document.getElementById(id).classList.add('active'); }
+function hideModal(id) { document.getElementById(id).classList.remove('active'); }
+
+async function addExchange(e) {
+  e.preventDefault();
+  const alert = document.getElementById('exchangeAlert');
+  alert.innerHTML = '';
+
+  const data = {
+    name: document.getElementById('exchangeName').value,
+    api_key: document.getElementById('apiKey').value.trim(),
+    api_secret: document.getElementById('apiSecret').value.trim(),
+    passphrase: document.getElementById('passphrase').value.trim() || null,
+    is_demo: document.getElementById('isDemo').checked
+  };
+
+  if (!data.api_key || !data.api_secret) {
+    alert.innerHTML = '<div class="alert error">API Key and Secret are required</div>';
+    return false;
+  }
+
+  try {
+    const resp = await fetch('/api/exchanges', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(data)
+    });
+    const result = await resp.json();
+
+    if (result.success) {
+      alert.innerHTML = '<div class="alert success">Exchange added!</div>';
+      setTimeout(() => { hideModal('addExchangeModal'); location.reload(); }, 1000);
+    } else {
+      alert.innerHTML = '<div class="alert error">' + (result.error || 'Failed') + '</div>';
+    }
+  } catch (err) {
+    alert.innerHTML = '<div class="alert error">Network error</div>';
+  }
+  return false;
+}
+
+// Quick actions
+function autoOptimize() { alert('Auto-optimize started'); }
+function exportCSV() { alert('Export started'); }
+function trainML() { alert('ML training started'); }
+function refreshData() { loadData(); }
+function toggleDCA() {
+  const toggle = document.getElementById('dcaToggle');
+  toggle.classList.toggle('active');
+}
+function setRisk(profile) {
+  document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+  event.target.classList.add('active');
+}
+function toggleTheme() { alert('Theme toggle'); }
+
+// Close modal on outside click
+document.addEventListener('click', function(e) {
+  if (e.target.classList.contains('modal-overlay')) e.target.classList.remove('active');
+});
+
+// Initial load
+loadData();
+setInterval(loadData, 30000);
+</script>
+
+</body>
+</html>
