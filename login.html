@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SUPERBOT - Login</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        .login-page {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: var(--bg-primary);
+            padding: 20px;
+        }
+        .login-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius);
+            padding: 40px;
+            width: 100%;
+            max-width: 400px;
+            text-align: center;
+        }
+        .login-logo {
+            width: 60px;
+            height: 60px;
+            margin: 0 auto 20px;
+        }
+        .login-logo svg {
+            width: 100%;
+            height: 100%;
+            animation: rotate 20s linear infinite;
+        }
+        .login-title {
+            font-size: 22px;
+            font-weight: 700;
+            margin-bottom: 4px;
+            background: linear-gradient(135deg, var(--accent-blue), #0099cc);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .login-subtitle {
+            font-size: 13px;
+            color: var(--text-muted);
+            margin-bottom: 32px;
+        }
+        .login-form .form-group {
+            text-align: left;
+            margin-bottom: 20px;
+        }
+        .login-form input {
+            width: 100%;
+            padding: 12px 16px;
+            background: var(--bg-input);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-sm);
+            color: var(--text-primary);
+            font-size: 14px;
+            font-family: inherit;
+            transition: all 0.2s;
+        }
+        .login-form input:focus {
+            outline: none;
+            border-color: var(--accent-blue);
+            box-shadow: 0 0 0 3px rgba(0, 212, 255, 0.1);
+        }
+        .login-form .btn {
+            width: 100%;
+            justify-content: center;
+            padding: 14px;
+            font-size: 14px;
+        }
+        .login-error {
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.2);
+            color: #f87171;
+            padding: 12px;
+            border-radius: var(--radius-sm);
+            font-size: 13px;
+            margin-bottom: 20px;
+            display: none;
+        }
+        .login-error.show { display: block; }
+        .login-footer {
+            margin-top: 24px;
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+        .login-version {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px;
+            color: var(--text-muted);
+            margin-top: 8px;
+        }
+    </style>
+</head>
+<body>
+    <div class="login-page">
+        <div class="login-card">
+            <div class="login-logo">
+                <svg viewBox="0 0 40 40">
+                    <circle cx="20" cy="20" r="16" fill="none" stroke="url(#logoGrad)" stroke-width="2"/>
+                    <circle cx="20" cy="20" r="8" fill="url(#logoGrad)" opacity="0.3"/>
+                    <defs>
+                        <linearGradient id="logoGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                            <stop offset="0%" stop-color="#00d4ff"/>
+                            <stop offset="100%" stop-color="#0099cc"/>
+                        </linearGradient>
+                    </defs>
+                </svg>
+            </div>
+            <div class="login-title">NEXUS</div>
+            <div class="login-subtitle">SUPERBOT {{ version }} Mercedes Edition</div>
+
+            <div class="login-error" id="loginError">Неверный пароль</div>
+
+            <form class="login-form" id="loginForm">
+                <div class="form-group">
+                    <label>Пароль доступа</label>
+                    <input type="password" name="password" placeholder="Введите пароль" required autofocus>
+                </div>
+                <button type="submit" class="btn btn-primary">Войти</button>
+            </form>
+
+            <div class="login-footer">
+                Доступ защищён паролем
+                <div class="login-version">v{{ version }}</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('loginForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const password = e.target.password.value;
+            const errorEl = document.getElementById('loginError');
+
+            try {
+                const res = await fetch('/api/login', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({password})
+                });
+                const data = await res.json();
+
+                if (data.success) {
+                    const urlParams = new URLSearchParams(window.location.search);
+                    const next = urlParams.get('next') || '/';
+                    window.location.href = next;
+                } else {
+                    errorEl.textContent = data.error || 'Неверный пароль';
+                    errorEl.classList.add('show');
+                }
+            } catch (e) {
+                errorEl.textContent = 'Ошибка соединения';
+                errorEl.classList.add('show');
+            }
+        });
+    </script>
+</body>
+</html>
