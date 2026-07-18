@@ -27,27 +27,26 @@ logging.basicConfig(
 )
 
 
-def create_app(config_name='default'):
-    """Application factory"""
-    app = Flask(__name__)
-    app.config.from_object(config[config_name])
-
-    db.init_app(app)
-
-    with app.app_context():
-        from sqlalchemy import inspect
-        inspector = inspect(db.engine)
-        if not inspector.has_table('exchanges'):
-            db.create_all()
-
-    return app
-
-
-app = create_app(os.environ.get('FLASK_ENV', 'production'))
-
-engine = TradingEngine(app=app)
-sentiment_analyzer = SentimentAnalyzer()
-ml_filter = XGBoostFilter()
+    def to_dict(self, include_secrets=False):
+        """Serialize to dict"""
+        data = {
+            'id': self.id,
+            'name': self.name,
+            'display_name': self.display_name,
+            'is_demo': self.is_demo,
+            'is_active': self.is_active,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+        }
+        if include_secrets:
+            from crypto_utils import decrypt_value
+            data['api_key'] = decrypt_value(self.api_key_encrypted)
+            data['api_secret'] = decrypt_value(self.api_secret_encrypted)
+            data['passphrase'] = decrypt_value(self.passphrase_encrypted) if self.passphrase_encrypted else ''
+        else:
+            # Mask secrets for display
+            data['api_key_masked'] = self._mask_string(decrypt_value(self.api_key_encrypted)) if self.api_key_encrypted else ''
+        return data
 
 
 # ═══════════════════════════════════════════
