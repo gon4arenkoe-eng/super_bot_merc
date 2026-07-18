@@ -35,8 +35,10 @@ def create_app(config_name='default'):
     db.init_app(app)
 
     with app.app_context():
-        # FIX: Use checkfirst=True to skip existing tables
-        db.create_all(checkfirst=True)
+        from sqlalchemy import inspect
+        inspector = inspect(db.engine)
+        if not inspector.has_table('exchanges'):
+            db.create_all()
 
     return app
 
