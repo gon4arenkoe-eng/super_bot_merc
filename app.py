@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """
-SUPERBOT v5.5.39 Mercedes Full - FIXED
+SUPERBOT v5.5.40 Mercedes Full - JWT Auth
 Pure functions in core/parsers.py, idempotent orders, auto-reset daily PnL
 Fixed: klines error handling, type safety, remove dead code, duplicate exchange protection
+JWT Authentication with user registration
 """
 
 import os
@@ -21,13 +22,14 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from urllib.parse import urlencode
 
-from flask import Flask, request, jsonify, render_template, redirect, url_for
-from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
+from flask import Flask, request, jsonify, render_template, redirect, url_for, g
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+from functools import wraps
+import jwt
 
 # ── Import pure functions from core/parsers ─────────────────────────────
 from core.parsers import parse_balance, parse_all_positions, parse_klines_bingx
@@ -51,7 +53,7 @@ logger = logging.getLogger('SUPERBOT')
 # ── Flask App ──────────────────────────────────────────────────────────
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'superbot-secret-key-change-me')
-app.config['VERSION'] = '5.5.39'
+app.config['VERSION'] = '5.5.40'
 app.config['EDITION'] = 'Mercedes'
 app.config['SUPPORTED_EXCHANGES'] = ['bingx', 'binance', 'bybit', 'okx']
 
@@ -119,6 +121,20 @@ def decrypt_value(encrypted_value):
         return encrypted_value
 
 # ── Models ───────────────────────────────────────────────────────────────
+class User(db.Model):
+    __tablename__ = 'users'
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(80), unique=True, nullable=False, index=True)
+    password_hash = db.Column(db.String(255), nullable=False)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    is_active = db.Column(db.Boolean, default=True)
+
+    def to_dict(self):
+        return {
+            'id': self.id, 'username': self.username,
+            'created_at': self.created_at.isoformat() if self.created_at else None
+        }
+
 class Exchange(db.Model):
     __tablename__ = 'exchanges'
     id = db.Column(db.Integer, primary_key=True)
@@ -203,23 +219,79 @@ class SentOrder(db.Model):
             'created_at': self.created_at.isoformat() if self.created_at else None
         }
 
-# ── Login Manager ──────────────────────────────────────────────────────
-login_manager = LoginManager()
-login_manager.init_app(app)
-login_manager.login_view = 'login'
+# ═══════════════════════════════════════════════════════════════════════
+# JWT AUTHENTICATION
+# ═══════════════════════════════════════════════════════════════════════
 
-class User(UserMixin):
-    def __init__(self, id_val, username, password_hash):
-        self.id = id_val
-        self.username = username
-        self.password_hash = password_hash
+JWT_SECRET = os.environ.get('JWT_SECRET_KEY') or os.environ.get('SECRET_KEY') or 'superbot-jwt-secret-change-me-min-32-chars'
+JWT_ALGORITHM = 'HS256'
+JWT_ACCESS_EXPIRES = timedelta(hours=24)
+JWT_REFRESH_EXPIRES = timedelta(days=7)
 
-@login_manager.user_loader
-def load_user(user_id):
-    auth_pass = os.environ.get('AUTH_PASSWORD')
-    if auth_pass:
-        return User(1, 'admin', generate_password_hash(auth_pass))
+def create_tokens(user_id, username):
+    now = datetime.now(timezone.utc)
+    access_payload = {
+        'user_id': user_id, 'username': username, 'type': 'access',
+        'iat': now, 'exp': now + JWT_ACCESS_EXPIRES
+    }
+    refresh_payload = {
+        'user_id': user_id, 'username': username, 'type': 'refresh',
+        'iat': now, 'exp': now + JWT_REFRESH_EXPIRES
+    }
+    return {
+        'access_token': jwt.encode(access_payload, JWT_SECRET, algorithm=JWT_ALGORITHM),
+        'refresh_token': jwt.encode(refresh_payload, JWT_SECRET, algorithm=JWT_ALGORITHM),
+        'token_type': 'Bearer',
+        'expires_in': int(JWT_ACCESS_EXPIRES.total_seconds())
+    }
+
+def decode_token(token, token_type='access'):
+    try:
+        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        if payload.get('type') != token_type:
+            return None, 'Invalid token type'
+        return payload, None
+    except jwt.ExpiredSignatureError:
+        return None, 'Token expired'
+    except jwt.InvalidTokenError:
+        return None, 'Invalid token'
+
+def get_auth_token():
+    auth_header = request.headers.get('Authorization', '')
+    if auth_header.startswith('Bearer '):
+        return auth_header[7:]
     return None
+
+def jwt_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        token = get_auth_token()
+        if not token:
+            return jsonify({'success': False, 'error': 'Missing authorization token'}), 401
+        payload, error = decode_token(token, 'access')
+        if error:
+            return jsonify({'success': False, 'error': error}), 401
+        g.current_user = payload
+        g.user_id = payload['user_id']
+        g.username = payload['username']
+        return f(*args, **kwargs)
+    return decorated
+
+def jwt_optional(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        token = get_auth_token()
+        g.current_user = None
+        g.user_id = None
+        g.username = None
+        if token:
+            payload, error = decode_token(token, 'access')
+            if not error:
+                g.current_user = payload
+                g.user_id = payload['user_id']
+                g.username = payload['username']
+        return f(*args, **kwargs)
+    return decorated
 
 # ═══════════════════════════════════════════════════════════════════════
 # EXCHANGE API CLIENTS — ALL 4 EXCHANGES
@@ -936,42 +1008,107 @@ engine = TradingEngine(app)
 sentiment_analyzer = SentimentAnalyzer()
 
 # ═══════════════════════════════════════════════════════════════════════
-# ROUTES: AUTH
+# ROUTES: AUTH (JWT)
 # ═══════════════════════════════════════════════════════════════════════
 
 @app.route('/')
 def index():
-    if current_user.is_authenticated:
-        return redirect(url_for('dashboard'))
     return render_template('login.html')
 
-@app.route('/login', methods=['GET', 'POST'])
-def login():
-    if request.method == 'POST':
-        password = request.form.get('password')
-        auth_pass = os.environ.get('AUTH_PASSWORD')
-        if auth_pass and password == auth_pass:
-            user = User(1, 'admin', generate_password_hash(auth_pass))
-            login_user(user)
-            return redirect(url_for('dashboard'))
-        return render_template('login.html', error='Неверный пароль')
-    return render_template('login.html')
-
-@app.route('/api/login', methods=['POST'])
-def api_login():
+@app.route('/api/auth/register', methods=['POST'])
+def api_register():
     data = request.get_json() or {}
-    password = data.get('password')
+    username = data.get('username', '').strip().lower()
+    password = data.get('password', '')
+
+    if not username or len(username) < 3:
+        return jsonify({'success': False, 'error': 'Username must be at least 3 characters'}), 400
+    if not password or len(password) < 6:
+        return jsonify({'success': False, 'error': 'Password must be at least 6 characters'}), 400
+
+    if User.query.filter_by(username=username).first():
+        return jsonify({'success': False, 'error': 'Username already taken'}), 409
+
+    user = User(username=username, password_hash=generate_password_hash(password))
+    db.session.add(user)
+    db.session.commit()
+
+    tokens = create_tokens(user.id, user.username)
+    return jsonify({
+        'success': True, 'message': 'User registered',
+        'user': user.to_dict(), **tokens
+    }), 201
+
+@app.route('/api/auth/login', methods=['POST'])
+def api_login_jwt():
+    data = request.get_json() or {}
+    username = data.get('username', '').strip().lower()
+    password = data.get('password', '')
+
+    # Backward compatibility: create first admin from AUTH_PASSWORD
     auth_pass = os.environ.get('AUTH_PASSWORD')
-    if auth_pass and password == auth_pass:
-        user = User(1, 'admin', generate_password_hash(auth_pass))
-        login_user(user)
-        return jsonify({'success': True})
-    return jsonify({'success': False, 'error': 'Неверный пароль'}), 401
+    if auth_pass and not User.query.first():
+        admin = User(username='admin', password_hash=generate_password_hash(auth_pass))
+        db.session.add(admin)
+        db.session.commit()
+
+    user = User.query.filter_by(username=username).first()
+    if not user or not check_password_hash(user.password_hash, password):
+        return jsonify({'success': False, 'error': 'Invalid username or password'}), 401
+
+    tokens = create_tokens(user.id, user.username)
+    return jsonify({
+        'success': True, 'message': 'Login successful',
+        'user': user.to_dict(), **tokens
+    })
+
+@app.route('/api/auth/refresh', methods=['POST'])
+def api_refresh():
+    data = request.get_json() or {}
+    refresh_token = data.get('refresh_token')
+    if not refresh_token:
+        return jsonify({'success': False, 'error': 'Refresh token required'}), 400
+
+    payload, error = decode_token(refresh_token, 'refresh')
+    if error:
+        return jsonify({'success': False, 'error': error}), 401
+
+    user = User.query.get(payload['user_id'])
+    if not user:
+        return jsonify({'success': False, 'error': 'User not found'}), 401
+
+    tokens = create_tokens(user.id, user.username)
+    return jsonify({'success': True, **tokens})
+
+@app.route('/api/auth/me', methods=['GET'])
+@jwt_required
+def api_me():
+    user = User.query.get(g.user_id)
+    if not user:
+        return jsonify({'success': False, 'error': 'User not found'}), 404
+    return jsonify({'success': True, 'user': user.to_dict()})
+
+@app.route('/api/auth/change-password', methods=['POST'])
+@jwt_required
+def api_change_password():
+    data = request.get_json() or {}
+    old_password = data.get('old_password', '')
+    new_password = data.get('new_password', '')
+
+    if not old_password or not new_password or len(new_password) < 6:
+        return jsonify({'success': False, 'error': 'Invalid passwords'}), 400
+
+    user = User.query.get(g.user_id)
+    if not user or not check_password_hash(user.password_hash, old_password):
+        return jsonify({'success': False, 'error': 'Invalid old password'}), 401
+
+    user.password_hash = generate_password_hash(new_password)
+    db.session.commit()
+    return jsonify({'success': True, 'message': 'Password changed'})
 
 @app.route('/logout')
-@login_required
 def logout():
-    logout_user()
+    # JWT is stateless — client discards token
     return redirect(url_for('index'))
 
 
@@ -980,7 +1117,6 @@ def logout():
 # ═══════════════════════════════════════════════════════════════════════
 
 @app.route('/dashboard')
-@login_required
 def dashboard():
     exchanges = Exchange.query.all()
     positions = Position.query.filter_by(status='OPEN').all()
@@ -992,7 +1128,6 @@ def dashboard():
     )
 
 @app.route('/exchanges')
-@login_required
 def exchanges_page():
     return render_template('exchanges.html', supported=app.config['SUPPORTED_EXCHANGES'])
 
@@ -1002,12 +1137,12 @@ def exchanges_page():
 # ═══════════════════════════════════════════════════════════════════════
 
 @app.route('/api/exchanges', methods=['GET'])
-@login_required
+@jwt_required
 def get_exchanges():
     return jsonify({'success': True, 'data': ExchangeManager.get_all_exchanges()})
 
 @app.route('/api/exchanges', methods=['POST'])
-@login_required
+@jwt_required
 def add_exchange():
     data = request.get_json() or {}
     try:
@@ -1028,12 +1163,12 @@ def add_exchange():
         return jsonify({'success': False, 'error': str(e)}), 400
 
 @app.route('/api/exchanges/<int:exchange_id>', methods=['DELETE'])
-@login_required
+@jwt_required
 def delete_exchange(exchange_id):
     return jsonify({'success': ExchangeManager.delete_exchange(exchange_id)})
 
 @app.route('/api/exchanges/<int:exchange_id>/toggle', methods=['POST'])
-@login_required
+@jwt_required
 def toggle_exchange(exchange_id):
     result = ExchangeManager.toggle_active(exchange_id)
     if result:
@@ -1046,13 +1181,13 @@ def toggle_exchange(exchange_id):
 # ═══════════════════════════════════════════════════════════════════════
 
 @app.route('/api/positions')
-@login_required
+@jwt_required
 def get_positions():
     positions = Position.query.filter_by(status='OPEN').all()
     return jsonify({'success': True, 'data': [p.to_dict() for p in positions]})
 
 @app.route('/api/positions/live')
-@login_required
+@jwt_required
 def get_live_positions():
     exchanges = Exchange.query.filter_by(is_active=True).all()
     all_positions = []
@@ -1071,7 +1206,7 @@ def get_live_positions():
     return jsonify(all_positions)
 
 @app.route('/api/positions/<int:position_id>/close', methods=['POST'])
-@login_required
+@jwt_required
 def close_position(position_id):
     pos = db.session.get(Position, position_id)
     if not pos:
@@ -1094,18 +1229,18 @@ def close_position(position_id):
 # ═══════════════════════════════════════════════════════════════════════
 
 @app.route('/api/bot/status')
-@login_required
+@jwt_required
 def bot_status():
     return jsonify(engine.get_status())
 
 @app.route('/api/bot/start', methods=['POST'])
-@login_required
+@jwt_required
 def bot_start():
     engine.start()
     return jsonify({'success': True, 'status': 'running'})
 
 @app.route('/api/bot/stop', methods=['POST'])
-@login_required
+@jwt_required
 def bot_stop():
     engine.stop()
     return jsonify({'success': True, 'status': 'stopped'})
@@ -1116,7 +1251,7 @@ def bot_stop():
 # ═══════════════════════════════════════════════════════════════════════
 
 @app.route('/api/sentiment')
-@login_required
+@jwt_required
 def get_sentiment():
     symbol = request.args.get('symbol', 'BTC')
     data = sentiment_analyzer.analyze(symbol)
@@ -1128,7 +1263,7 @@ def get_sentiment():
 # ═══════════════════════════════════════════════════════════════════════
 
 @app.route('/api/balance')
-@login_required
+@jwt_required
 def get_balance():
     exchanges = Exchange.query.filter_by(is_active=True).all()
     balances = {}
