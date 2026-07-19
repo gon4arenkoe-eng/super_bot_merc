@@ -44,7 +44,7 @@
             </div>
             <div class="form-group">
                 <label>Название <span class="required">*</span></label>
-                <input type="text" id="displayName" name="display_name" placeholder="Например: Моя BingX" required>
+                <input type="text" name="display_name" placeholder="Например: Моя BingX" required>
             </div>
             <div class="form-group">
                 <label>API Key <span class="required">*</span></label>
@@ -269,5 +269,70 @@ function formatDate(dateStr) {
 document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') closeAddModal();
 });
+</script>
+<script>
+const TOKEN_KEY = 'sb_access_token';
+const REFRESH_KEY = 'sb_refresh_token';
+function getToken() { return localStorage.getItem(TOKEN_KEY); }
+function getRefreshToken() { return localStorage.getItem(REFRESH_KEY); }
+
+async function apiFetch(url, options = {}) {
+  if (!options.headers) options.headers = {};
+  options.headers['Content-Type'] = 'application/json';
+  const token = getToken();
+  if (token) options.headers['Authorization'] = 'Bearer ' + token;
+  const res = await fetch(url, options);
+  if (res.status === 401 && getRefreshToken()) {
+    const refreshed = await refreshAccessToken();
+    if (refreshed) { options.headers['Authorization'] = 'Bearer ' + getToken(); return fetch(url, options); }
+  }
+  return res;
+}
+
+async function refreshAccessToken() {
+  const refreshToken = getRefreshToken();
+  if (!refreshToken) return false;
+  try {
+    const res = await fetch('/api/auth/refresh', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({refresh_token: refreshToken}) });
+    const data = await res.json();
+    if (data.success) { localStorage.setItem(TOKEN_KEY, data.access_token); localStorage.setItem(REFRESH_KEY, data.refresh_token); return true; }
+  } catch (e) {}
+  localStorage.removeItem(TOKEN_KEY); localStorage.removeItem(REFRESH_KEY); return false;
+}
+
+(async function checkAuth() {
+  const token = getToken();
+  if (!token) { window.location.href = '/login'; return; }
+  try { const res = await apiFetch('/api/auth/me'); if (!res.ok) window.location.href = '/login'; }
+  catch (e) { window.location.href = '/login'; }
+})();
+
+async function addExchange(e) {
+  e.preventDefault();
+  const form = document.getElementById('addExchangeForm');
+  let alertBox = document.getElementById('exchangeAlert');
+  if (!alertBox) { alertBox = document.createElement('div'); alertBox.id = 'exchangeAlert'; alertBox.style.marginBottom = '15px'; form.insertBefore(alertBox, form.firstChild); }
+  const nameEl = document.getElementById('exchangeName');
+  const apiKeyEl = document.getElementById('apiKey');
+  const apiSecretEl = document.getElementById('apiSecret');
+  const passphraseEl = document.getElementById('passphrase');
+  const isDemoEl = document.getElementById('isDemo');
+  const data = {
+    name: nameEl ? nameEl.value.toLowerCase() : '',
+    display_name: (document.getElementById('displayName')?.value || nameEl?.value || 'Exchange').trim(),
+    api_key: (apiKeyEl ? apiKeyEl.value : '').trim(),
+    api_secret: (apiSecretEl ? apiSecretEl.value : '').trim(),
+    passphrase: (passphraseEl ? passphraseEl.value : '').trim() || null,
+    is_demo: isDemoEl ? isDemoEl.checked : true
+  };
+  if (!data.api_key || !data.api_secret) { alertBox.innerHTML = '<div style="background:rgba(255,85,119,0.15);color:#ff5577;border:1px solid rgba(255,85,119,0.3);padding:12px;border-radius:8px;">API Key and Secret are required</div>'; return false; }
+  try {
+    const resp = await apiFetch('/api/exchanges', { method: 'POST', body: JSON.stringify(data) });
+    const result = await resp.json();
+    if (result.success) { alertBox.innerHTML = '<div style="background:rgba(0,229,160,0.15);color:#00e5a0;border:1px solid rgba(0,229,160,0.3);padding:12px;border-radius:8px;">Exchange added!</div>'; setTimeout(() => { hideModal('addExchangeModal'); location.reload(); }, 1000); }
+    else { alertBox.innerHTML = '<div style="background:rgba(255,85,119,0.15);color:#ff5577;border:1px solid rgba(255,85,119,0.3);padding:12px;border-radius:8px;">' + (result.error || 'Failed') + '</div>'; }
+  } catch (err) { alertBox.innerHTML = '<div style="background:rgba(255,85,119,0.15);color:#ff5577;border:1px solid rgba(255,85,119,0.3);padding:12px;border-radius:8px;">Network error</div>'; }
+  return false;
+}
 </script>
 {% endblock %}
