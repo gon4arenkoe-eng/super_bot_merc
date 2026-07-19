@@ -1,12 +1,13 @@
-"""SUPERBOT v5.5.36 - Trading Engine (Flat Imports)"""
+"""SUPERBOT v5.5.37 - Trading Engine (Idempotent Orders)"""
 import os
 import time
 import logging
 import threading
+import hashlib
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional
 
-from models import db, Position
+from models import db, Position, SentOrder
 from exchange_manager import ExchangeManager
 from risk import RiskManager, RiskConfig
 from ema_cross import EMAStrategy
@@ -50,6 +51,62 @@ class TradingEngine:
 
         return None
 
+    # ═══════════════════════════════════════════════════════════════════
+    # IDEMPOTENT ORDER ID GENERATION
+    # ═══════════════════════════════════════════════════════════════════
+
+    def _generate_client_order_id(self, exchange_id: int, symbol: str,
+                                   side: str, price: float, 
+                                   timestamp_minute: int = None) -> str:
+        """
+        Generate deterministic client_order_id for idempotency.
+
+        Format: "{exchange_id}_{symbol}_{side}_{minute_timestamp_hash}"
+
+        Same signal in the same minute = same ID = no duplicate.
+        Different minute = different ID = new order allowed.
+        """
+        if timestamp_minute is None:
+            timestamp_minute = int(datetime.utcnow().timestamp() / 60)
+
+        raw = f"{exchange_id}_{symbol}_{side}_{price:.2f}_{timestamp_minute}"
+        hash_suffix = hashlib.md5(raw.encode()).hexdigest()[:8]
+
+        return f"SB_{exchange_id}_{symbol}_{side}_{hash_suffix}"
+
+    def _is_order_already_sent(self, client_order_id: str) -> bool:
+        """Check if this exact order was already sent"""
+        existing = SentOrder.query.filter_by(
+            client_order_id=client_order_id
+        ).first()
+        return existing is not None
+
+    def _record_sent_order(self, client_order_id: str, exchange_id: int,
+                           symbol: str, side: str, quantity: float,
+                           price: Optional[float], order_type: str,
+                           response: Dict = None):
+        """Record sent order to prevent duplicates"""
+        try:
+            order = SentOrder(
+                client_order_id=client_order_id,
+                exchange_id=exchange_id,
+                symbol=symbol,
+                side=side,
+                quantity=quantity,
+                price=price,
+                order_type=order_type,
+                status='SENT',
+                exchange_response=str(response) if response else None
+            )
+            db.session.add(order)
+            db.session.commit()
+            logger.info(f"Recorded sent order: {client_order_id}")
+        except Exception as e:
+            db.session.rollback()
+            logger.error(f"Failed to record sent order: {e}")
+
+    # ═══════════════════════════════════════════════════════════════════
+
     def start(self):
         if self.running:
             logger.warning("Engine already running")
@@ -78,7 +135,7 @@ class TradingEngine:
             time.sleep(60)
 
     def _check_daily_reset(self):
-        """FIX 5: Reset daily PnL at midnight"""
+        """FIX: Reset daily PnL at midnight"""
         today = datetime.utcnow().date()
         if today != self._last_pnl_reset:
             self.risk_manager.reset_daily_pnl()
@@ -118,7 +175,7 @@ class TradingEngine:
         return 0.0
 
     def _sync_positions(self, exchange_id: int, data: Dict):
-        """FIX 4: Sync positions without marking all as closed first"""
+        """FIX: Sync positions without marking all as closed first"""
         try:
             api_positions = data.get('data', [])
 
@@ -167,7 +224,7 @@ class TradingEngine:
                 if symbol not in seen_symbols:
                     pos.status = 'CLOSED'
                     pos.closed_at = datetime.utcnow()
-                    # FIX 5: Track realized PnL for daily limit
+                    # Track realized PnL for daily limit
                     self.risk_manager.update_daily_pnl(pos.pnl)
 
             db.session.commit()
@@ -203,7 +260,7 @@ class TradingEngine:
             except Exception as e:
                 logger.error(f"Analysis error for {symbol}: {e}")
 
-    def _execute_signal(self, exchange_id: int, client, symbol: str, 
+    def _execute_signal(self, exchange_id: int, client, symbol: str,
                        signal: Dict, balance: float):
         side = signal['signal']
 
@@ -222,27 +279,54 @@ class TradingEngine:
 
         current_price = signal['price']
         sl_tp = self.risk_manager.calculate_sl_tp(current_price, side)
-
         leverage = self.risk_manager.validate_leverage(5)
-        client.set_leverage(symbol, leverage)
 
+        client.set_leverage(symbol, leverage)
         position_side = 'LONG' if side == 'LONG' else 'SHORT'
+        order_side = 'BUY' if side == 'LONG' else 'SELL'
+        quantity = round(position_size / current_price, 4)
+
+        # ═══════════════════════════════════════════════════════════════
+        # IDEMPOTENCY CHECK
+        # ═══════════════════════════════════════════════════════════════
+        client_order_id = self._generate_client_order_id(
+            exchange_id, symbol, side, current_price
+        )
+
+        if self._is_order_already_sent(client_order_id):
+            logger.warning(
+                f"IDEMPOTENCY BLOCK: Order {client_order_id} already sent. "
+                f"Skipping duplicate for {symbol} {side}"
+            )
+            return
 
         logger.info(f"Placing {side} order for {symbol} at {current_price}")
 
         if client.demo:
             logger.info(f"[DEMO] Would place order: {symbol} {side} @ {current_price}")
+            self._record_sent_order(
+                client_order_id, exchange_id, symbol, side,
+                quantity, current_price, 'MARKET',
+                {'demo': True}
+            )
             return
 
+        # Send order
         result = client.place_order(
             symbol=symbol,
-            side='BUY' if side == 'LONG' else 'SELL',
+            side=order_side,
             position_side=position_side,
             order_type='MARKET',
-            quantity=round(position_size / current_price, 4),
+            quantity=quantity,
             stop_loss=sl_tp['stop_loss'],
             take_profit=sl_tp['take_profit_1'],
             leverage=leverage
+        )
+
+        # Record sent order (even if exchange returned error)
+        self._record_sent_order(
+            client_order_id, exchange_id, symbol, side,
+            quantity, current_price, 'MARKET', result
         )
 
         logger.info(f"Order result: {result}")
