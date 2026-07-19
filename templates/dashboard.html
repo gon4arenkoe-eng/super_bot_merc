@@ -197,7 +197,7 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background:#060b14; color
       <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="1.5" fill="none"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="11" width="7" height="10" rx="1.5"/><rect x="3" y="13" width="7" height="8" rx="1.5"/></svg>
       Dashboard
     </a>
-    <a href="/exchanges" class="nav-item">
+    <a href="/positions" class="nav-item">
       <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="1.5" fill="none"><path d="M3 18L9 12L13 16L21 6"/><circle cx="21" cy="6" r="1.5" fill="currentColor"/></svg>
       Positions
     </a>
@@ -581,7 +581,7 @@ function updatePositionsTable(positions) {
       <div>$${pos.entry_price?.toFixed(2) || '0.00'}</div>
       <div>$${pos.mark_price?.toFixed(2) || pos.entry_price?.toFixed(2) || '0.00'}</div>
       <div class="${pnlClass}">${pnlSign}${pos.pnl?.toFixed(2) || '0.00'}</div>
-      <div><button class="action-btn" onclick="closePosition(${pos.exchange_id}, '${pos.symbol}', '${pos.side}')">Close</button></div>
+      <div><button class="action-btn" onclick="closePosition(${pos.exchange_id || 0}, '${pos.symbol}', '${pos.side}')">Close</button></div>
     </div>`;
   });
   container.innerHTML = html;
@@ -611,11 +611,15 @@ async function emergencyClose() {
 
 async function closePosition(exchangeId, symbol, side) {
   if (!confirm('Close position ' + symbol + ' ' + side + '?')) return;
-  await fetch('/api/orders/close', {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({exchange_id: exchangeId, symbol: symbol, side: side})
-  });
+  // Find position ID first
+  const res = await fetch('/api/positions');
+  const data = await res.json();
+  if (data.success && data.data) {
+    const pos = data.data.find(p => p.exchange_id === exchangeId && p.symbol === symbol && p.side === side && p.status === 'OPEN');
+    if (pos) {
+      await fetch('/api/positions/' + pos.id + '/close', {method: 'POST'});
+    }
+  }
   loadData();
 }
 
