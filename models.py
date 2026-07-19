@@ -1,4 +1,4 @@
-"""SUPERBOT v5.5.36 - Database Models"""
+"""SUPERBOT v5.5.37 - Database Models"""
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
 
@@ -8,7 +8,7 @@ db = SQLAlchemy()
 class Exchange(db.Model):
     """Exchange API credentials storage"""
     __tablename__ = 'exchanges'
-    
+
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(50), nullable=False)
     display_name = db.Column(db.String(100), nullable=False)
@@ -19,11 +19,11 @@ class Exchange(db.Model):
     is_active = db.Column(db.Boolean, default=True, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    
+
     def to_dict(self, include_secrets=False):
         """Serialize to dict"""
         from crypto_utils import decrypt_value
-        
+
         data = {
             'id': self.id,
             'name': self.name,
@@ -40,7 +40,7 @@ class Exchange(db.Model):
         else:
             data['api_key_masked'] = self._mask_string(decrypt_value(self.api_key_encrypted)) if self.api_key_encrypted else ''
         return data
-    
+
     @staticmethod
     def _mask_string(s: str, visible_chars: int = 4) -> str:
         """Mask string showing only last N chars"""
@@ -52,7 +52,7 @@ class Exchange(db.Model):
 class BotSettings(db.Model):
     """Bot configuration settings"""
     __tablename__ = 'bot_settings'
-    
+
     id = db.Column(db.Integer, primary_key=True)
     key = db.Column(db.String(100), unique=True, nullable=False)
     value = db.Column(db.Text, nullable=True)
@@ -62,7 +62,7 @@ class BotSettings(db.Model):
 class Position(db.Model):
     """Trading positions"""
     __tablename__ = 'positions'
-    
+
     id = db.Column(db.Integer, primary_key=True)
     exchange_id = db.Column(db.Integer, db.ForeignKey('exchanges.id'), nullable=False)
     symbol = db.Column(db.String(50), nullable=False)
@@ -74,3 +74,43 @@ class Position(db.Model):
     status = db.Column(db.String(20), default='OPEN')
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     closed_at = db.Column(db.DateTime, nullable=True)
+
+
+class SentOrder(db.Model):
+    """
+    Idempotent order tracking — prevents duplicate orders.
+
+    When bot sends an order, it generates a unique client_order_id
+    based on signal parameters. If the same signal fires again
+    (e.g., network timeout → retry), we check: was this exact order
+    already sent? If yes — skip.
+
+    client_order_id format: "{exchange_id}_{symbol}_{side}_{timestamp_rounded}"
+    """
+    __tablename__ = 'sent_orders'
+
+    id = db.Column(db.Integer, primary_key=True)
+    client_order_id = db.Column(db.String(100), unique=True, nullable=False, index=True)
+    exchange_id = db.Column(db.Integer, db.ForeignKey('exchanges.id'), nullable=False)
+    symbol = db.Column(db.String(50), nullable=False)
+    side = db.Column(db.String(10), nullable=False)
+    quantity = db.Column(db.Float, nullable=False)
+    price = db.Column(db.Float, nullable=True)
+    order_type = db.Column(db.String(20), nullable=False)
+    status = db.Column(db.String(20), default='SENT')  # SENT, FILLED, REJECTED, ERROR
+    exchange_response = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'client_order_id': self.client_order_id,
+            'exchange_id': self.exchange_id,
+            'symbol': self.symbol,
+            'side': self.side,
+            'quantity': self.quantity,
+            'price': self.price,
+            'order_type': self.order_type,
+            'status': self.status,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+        }
