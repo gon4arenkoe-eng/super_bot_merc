@@ -2,7 +2,7 @@
 """
 SUPERBOT v5.5.39 Mercedes Full - FIXED
 Pure functions in core/parsers.py, idempotent orders, auto-reset daily PnL
-Fixed: klines error handling, type safety, deprecated APIs
+Fixed: klines error handling, type safety, remove dead code, duplicate exchange protection
 """
 
 import os
@@ -507,10 +507,34 @@ class OKXClient:
 class ExchangeManager:
     @staticmethod
     def add_exchange(name, display_name, api_key, api_secret, passphrase=None, is_demo=True):
+        # Normalize inputs
+        name = name.lower().strip() if name else ''
+        api_key = api_key.strip() if api_key else ''
+        api_secret = api_secret.strip() if api_secret else ''
+
+        # Validate
+        if not name:
+            raise ValueError("Exchange name is required")
+        if not api_key:
+            raise ValueError("API key is required")
+        if not api_secret:
+            raise ValueError("API secret is required")
+        if name not in app.config['SUPPORTED_EXCHANGES']:
+            raise ValueError(f"Unsupported exchange: {name}. Supported: {', '.join(app.config['SUPPORTED_EXCHANGES'])}")
+
+        # FIX: Prevent duplicate exchanges with same API key
+        encrypted_key = encrypt_value(api_key)
+        existing = Exchange.query.filter_by(
+            name=name,
+            api_key_encrypted=encrypted_key
+        ).first()
+        if existing:
+            raise ValueError(f"Exchange {name.upper()} with this API key already exists (ID: {existing.id}, added: {existing.created_at})")
+
         ex = Exchange(
-            name=name.lower(),
-            display_name=display_name,
-            api_key_encrypted=encrypt_value(api_key),
+            name=name,
+            display_name=display_name or name.upper(),
+            api_key_encrypted=encrypted_key,
             api_secret_encrypted=encrypt_value(api_secret),
             passphrase_encrypted=encrypt_value(passphrase) if passphrase else None,
             is_demo=is_demo,
@@ -518,6 +542,7 @@ class ExchangeManager:
         )
         db.session.add(ex)
         db.session.commit()
+        logger.info(f"Added exchange: {name.upper()} (ID: {ex.id}, demo: {is_demo})")
         return ex
 
     @staticmethod
@@ -990,6 +1015,9 @@ def add_exchange():
             is_demo=data.get('is_demo', True)
         )
         return jsonify({'success': True, 'id': ex.id})
+    except ValueError as e:
+        logger.warning(f"Add exchange validation error: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 400
     except Exception as e:
         logger.error(f"Add exchange error: {e}")
         return jsonify({'success': False, 'error': str(e)}), 400
