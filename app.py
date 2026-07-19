@@ -1413,6 +1413,24 @@ def init_db_route():
             logger.error(f"init-db error: {e}")
             return jsonify({'success': False, 'error': str(e)}), 500
 
+@app.route('/reset-db')
+def reset_db_route():
+    """DROP ALL tables and recreate them. WARNING: DESTROYS ALL DATA!"""
+    with app.app_context():
+        try:
+            db.drop_all()
+            logger.warning("Database DROP ALL executed via /reset-db")
+            db.create_all()
+            logger.info("Database recreated via /reset-db")
+            return jsonify({
+                'success': True,
+                'message': 'Database reset complete. All tables dropped and recreated.',
+                'tables': ['users', 'exchanges', 'positions', 'bot_settings', 'sent_orders']
+            })
+        except Exception as e:
+            logger.error(f"reset-db error: {e}")
+            return jsonify({'success': False, 'error': str(e)}), 500
+
 
 # ═══════════════════════════════════════════════════════════════════════
 # MAIN
