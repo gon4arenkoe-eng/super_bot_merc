@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
-SUPERBOT v5.5.38 Mercedes Full - REFACTORED
+SUPERBOT v5.5.39 Mercedes Full - FIXED
 Pure functions in core/parsers.py, idempotent orders, auto-reset daily PnL
+Fixed: klines error handling, type safety, deprecated APIs
 """
 
 import os
@@ -16,7 +17,7 @@ import threading
 import uuid
 import requests
 import numpy as np
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal
 from urllib.parse import urlencode
 
@@ -50,7 +51,7 @@ logger = logging.getLogger('SUPERBOT')
 # ── Flask App ──────────────────────────────────────────────────────────
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'superbot-secret-key-change-me')
-app.config['VERSION'] = '5.5.38'
+app.config['VERSION'] = '5.5.39'
 app.config['EDITION'] = 'Mercedes'
 app.config['SUPPORTED_EXCHANGES'] = ['bingx', 'binance', 'bybit', 'okx']
 
@@ -82,7 +83,7 @@ def inject_globals():
     return {
         'version': app.config['VERSION'],
         'edition': app.config['EDITION'],
-        'now': datetime.utcnow()
+        'now': datetime.now(timezone.utc)
     }
 
 # ── Encryption ─────────────────────────────────────────────────────────
@@ -128,8 +129,8 @@ class Exchange(db.Model):
     passphrase_encrypted = db.Column(db.Text, nullable=True)
     is_demo = db.Column(db.Boolean, default=True, nullable=False)
     is_active = db.Column(db.Boolean, default=True, nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     def to_dict(self, include_secrets=False):
         data = {
@@ -158,7 +159,7 @@ class Position(db.Model):
     leverage = db.Column(db.Integer, default=5)
     pnl = db.Column(db.Float, default=0.0)
     status = db.Column(db.String(20), default='OPEN')
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
     closed_at = db.Column(db.DateTime, nullable=True)
 
     def to_dict(self):
@@ -175,7 +176,7 @@ class BotSettings(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     key = db.Column(db.String(100), unique=True, nullable=False)
     value = db.Column(db.Text, nullable=True)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
 class SentOrder(db.Model):
     """Idempotent order tracking — prevents duplicate orders"""
@@ -190,7 +191,7 @@ class SentOrder(db.Model):
     order_type = db.Column(db.String(20), nullable=False)
     status = db.Column(db.String(20), default='SENT')
     exchange_response = db.Column(db.Text, nullable=True)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
     def to_dict(self):
         return {
@@ -256,9 +257,17 @@ class BingXClient:
             else:
                 return {'error': f'Unsupported method: {method}'}
             response.raise_for_status()
-            return response.json()
+            result = response.json()
+            # FIX: Log raw response for debugging
+            if isinstance(result, dict) and 'code' in result and result.get('code') != 0:
+                logger.warning(f"BingX API warning {endpoint}: code={result.get('code')}, msg={result.get('msg')}")
+            return result
+        except requests.exceptions.RequestException as e:
+            logger.error(f"BingX API request error {endpoint}: {type(e).__name__}: {e}")
+            return {'error': f'{type(e).__name__}: {e}'}
         except Exception as e:
-            return {'error': str(e)}
+            logger.error(f"BingX API unexpected error {endpoint}: {type(e).__name__}: {e}")
+            return {'error': f'{type(e).__name__}: {e}'}
 
     def get_balance(self):
         return self._request('GET', '/openApi/swap/v2/user/balance', signed=True)
@@ -333,8 +342,12 @@ class BinanceClient:
                 return {'error': f'Unsupported method: {method}'}
             response.raise_for_status()
             return response.json()
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Binance API error {endpoint}: {type(e).__name__}: {e}")
+            return {'error': f'{type(e).__name__}: {e}'}
         except Exception as e:
-            return {'error': str(e)}
+            logger.error(f"Binance API unexpected error {endpoint}: {type(e).__name__}: {e}")
+            return {'error': f'{type(e).__name__}: {e}'}
 
     def get_balance(self):
         return self._request('GET', '/fapi/v2/balance', signed=True)
@@ -400,8 +413,12 @@ class BybitClient:
                 return {'error': f'Unsupported method: {method}'}
             response.raise_for_status()
             return response.json()
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Bybit API error {endpoint}: {type(e).__name__}: {e}")
+            return {'error': f'{type(e).__name__}: {e}'}
         except Exception as e:
-            return {'error': str(e)}
+            logger.error(f"Bybit API unexpected error {endpoint}: {type(e).__name__}: {e}")
+            return {'error': f'{type(e).__name__}: {e}'}
 
     def get_balance(self):
         return self._request('GET', '/v5/account/wallet-balance', {'accountType': 'UNIFIED'}, signed=True)
@@ -441,7 +458,7 @@ class OKXClient:
         headers = {}
         if params is None: params = {}
         if signed:
-            timestamp = datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z'
+            timestamp = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z'
             body = json.dumps(params) if params else ''
             signature = self._generate_signature(timestamp, method, endpoint, body)
             headers = {
@@ -460,8 +477,12 @@ class OKXClient:
                 return {'error': f'Unsupported method: {method}'}
             response.raise_for_status()
             return response.json()
+        except requests.exceptions.RequestException as e:
+            logger.error(f"OKX API error {endpoint}: {type(e).__name__}: {e}")
+            return {'error': f'{type(e).__name__}: {e}'}
         except Exception as e:
-            return {'error': str(e)}
+            logger.error(f"OKX API unexpected error {endpoint}: {type(e).__name__}: {e}")
+            return {'error': f'{type(e).__name__}: {e}'}
 
     def get_balance(self):
         return self._request('GET', '/api/v5/account/balance', signed=True)
@@ -505,7 +526,7 @@ class ExchangeManager:
 
     @staticmethod
     def delete_exchange(exchange_id):
-        ex = Exchange.query.get(exchange_id)
+        ex = db.session.get(Exchange, exchange_id)
         if ex:
             db.session.delete(ex)
             db.session.commit()
@@ -514,7 +535,7 @@ class ExchangeManager:
 
     @staticmethod
     def toggle_active(exchange_id):
-        ex = Exchange.query.get(exchange_id)
+        ex = db.session.get(Exchange, exchange_id)
         if ex:
             ex.is_active = not ex.is_active
             db.session.commit()
@@ -523,7 +544,7 @@ class ExchangeManager:
 
     @staticmethod
     def get_decrypted_credentials(exchange_id):
-        ex = Exchange.query.get(exchange_id)
+        ex = db.session.get(Exchange, exchange_id)
         if not ex:
             return None
         return {
@@ -601,41 +622,6 @@ class RiskManager:
 
 
 # ═══════════════════════════════════════════════════════════════════════
-# EMA STRATEGY
-# ═══════════════════════════════════════════════════════════════════════
-
-
-        closes = [c['close'] for c in candles]
-        ema_fast = self.calculate_ema(closes, self.fast_ema)
-        ema_slow = self.calculate_ema(closes, self.slow_ema)
-        ema_trend = self.calculate_ema(closes, self.trend_ema)
-        if len(ema_fast) < 2 or len(ema_slow) < 2:
-            return {'signal': 'NEUTRAL', 'confidence': 0}
-        fast_now, slow_now, trend_now = ema_fast[-1], ema_slow[-1], ema_trend[-1]
-        fast_prev, slow_prev = ema_fast[-2], ema_slow[-2]
-        cross_up = fast_prev < slow_prev and fast_now > slow_now
-        cross_down = fast_prev > slow_prev and fast_now < slow_now
-        above_trend = closes[-1] > trend_now
-        below_trend = closes[-1] < trend_now
-        signal, confidence = 'NEUTRAL', 0
-        if cross_up and above_trend:
-            signal, confidence = 'LONG', min(100, abs(fast_now - slow_now) / slow_now * 10000)
-        elif cross_down and below_trend:
-            signal, confidence = 'SHORT', min(100, abs(fast_now - slow_now) / slow_now * 10000)
-        return {
-            'signal': signal, 'confidence': round(confidence, 1),
-            'fast_ema': round(fast_now, 4), 'slow_ema': round(slow_now, 4),
-            'trend_ema': round(trend_now, 4), 'price': closes[-1]
-        }
-
-
-# ═══════════════════════════════════════════════════════════════════════
-# SENTIMENT ANALYZER
-# ═══════════════════════════════════════════════════════════════════════
-
-
-
-# ═══════════════════════════════════════════════════════════════════════
 # TRADING ENGINE — REFACTORED (pure functions from core/parsers)
 # ═══════════════════════════════════════════════════════════════════════
 
@@ -647,7 +633,7 @@ class TradingEngine:
         self.risk_manager = RiskManager()
         self.ema_strategy = EMAStrategy()
         self.clients = {}
-        self._last_pnl_reset = datetime.utcnow().date()
+        self._last_pnl_reset = datetime.now(timezone.utc).date()
 
     def _get_client(self, exchange_id):
         if exchange_id in self.clients:
@@ -682,7 +668,7 @@ class TradingEngine:
             time.sleep(60)
 
     def _check_daily_reset(self):
-        today = datetime.utcnow().date()
+        today = datetime.now(timezone.utc).date()
         if today != self._last_pnl_reset:
             self.risk_manager.reset_daily_pnl()
             self._last_pnl_reset = today
@@ -757,7 +743,7 @@ class TradingEngine:
             for symbol, pos in db_positions.items():
                 if symbol not in seen_symbols:
                     pos.status = 'CLOSED'
-                    pos.closed_at = datetime.utcnow()
+                    pos.closed_at = datetime.now(timezone.utc)
                     self.risk_manager.update_daily_pnl(pos.pnl)
 
             db.session.commit()
@@ -769,11 +755,22 @@ class TradingEngine:
         symbols = ['BTC-USDT', 'ETH-USDT']
         for symbol in symbols:
             try:
-                # Use pure function parse_klines_bingx
+                # FIX: Get klines with error handling and logging
                 klines_data = client.get_klines(symbol, interval='1h', limit=100)
+
+                # FIX: Check if klines_data is valid dict
+                if not isinstance(klines_data, dict):
+                    logger.warning(f"Klines invalid type for {symbol}: {type(klines_data)} = {klines_data}")
+                    continue
+
+                if 'error' in klines_data:
+                    logger.warning(f"Klines API error for {symbol}: {klines_data['error']}")
+                    continue
+
                 candles = parse_klines_bingx(klines_data)
 
                 if not candles:
+                    logger.info(f"No candles for {symbol}, skipping")
                     continue
 
                 signal = self.ema_strategy.analyze(candles)
@@ -781,7 +778,7 @@ class TradingEngine:
                 if signal['signal'] != 'NEUTRAL' and signal['confidence'] > 60:
                     self._execute_signal(exchange_id, client, symbol, signal, balance, exchange_name)
             except Exception as e:
-                logger.error(f"Analysis error for {symbol}: {e}")
+                logger.error(f"Analysis error for {symbol}: {type(e).__name__}: {e}")
 
     def _execute_signal(self, exchange_id, client, symbol, signal, balance, exchange_name):
         side = signal['signal']
@@ -861,7 +858,7 @@ class TradingEngine:
 
     def _generate_client_order_id(self, exchange_id, symbol, side, price):
         """Generate deterministic order ID for idempotency"""
-        timestamp_minute = int(datetime.utcnow().timestamp() / 60)
+        timestamp_minute = int(datetime.now(timezone.utc).timestamp() / 60)
         raw = f"{exchange_id}_{symbol}_{side}_{price:.2f}_{timestamp_minute}"
         hash_suffix = hashlib.md5(raw.encode()).hexdigest()[:8]
         return f"SB_{exchange_id}_{symbol}_{side}_{hash_suffix}"
@@ -1043,7 +1040,7 @@ def get_live_positions():
 @app.route('/api/positions/<int:position_id>/close', methods=['POST'])
 @login_required
 def close_position(position_id):
-    pos = Position.query.get(position_id)
+    pos = db.session.get(Position, position_id)
     if not pos:
         return jsonify({'success': False, 'error': 'Position not found'}), 404
     client = ExchangeManager.get_client(pos.exchange_id)
@@ -1052,7 +1049,7 @@ def close_position(position_id):
     try:
         result = client.close_position(pos.symbol, pos.side)
         pos.status = 'CLOSED'
-        pos.closed_at = datetime.utcnow()
+        pos.closed_at = datetime.now(timezone.utc)
         db.session.commit()
         return jsonify({'success': True, 'data': result})
     except Exception as e:
@@ -1126,7 +1123,7 @@ def health():
     return jsonify({
         'status': 'ok',
         'version': app.config['VERSION'],
-        'timestamp': datetime.utcnow().isoformat()
+        'timestamp': datetime.now(timezone.utc).isoformat()
     })
 
 
