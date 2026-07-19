@@ -58,7 +58,7 @@ app.config['SUPPORTED_EXCHANGES'] = ['bingx', 'binance', 'bybit', 'okx']
 
 # JWT Config
 JWT_SECRET = os.environ.get('JWT_SECRET', app.config['SECRET_KEY'])
-JWT_ACCESS_EXPIRE = int(os.environ.get('JWT_ACCESS_EXPIRE_MINUTES', '15'))
+JWT_ACCESS_EXPIRE = int(os.environ.get('JWT_ACCESS_EXPIRE_MINUTES', '60'))
 JWT_REFRESH_EXPIRE = int(os.environ.get('JWT_REFRESH_EXPIRE_DAYS', '7'))
 
 # Database
