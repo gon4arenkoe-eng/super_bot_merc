@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """
-SUPERBOT v5.5.37 Mercedes Full - MONOLITHIC
-All exchanges: BingX, Binance, Bybit, OKX
-No external module imports — everything in one file
+SUPERBOT v5.5.38 Mercedes Full - REFACTORED
+Pure functions in core/parsers.py, idempotent orders, auto-reset daily PnL
 """
 
 import os
@@ -29,6 +28,9 @@ from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
+# ── Import pure functions from core/parsers ─────────────────────────────
+from core.parsers import parse_balance, parse_all_positions, parse_klines_bingx
+
 # ── Logging ──────────────────────────────────────────────────────────────
 LOG_DIR = os.path.join(os.path.dirname(__file__), 'logs')
 os.makedirs(LOG_DIR, exist_ok=True)
@@ -46,7 +48,7 @@ logger = logging.getLogger('SUPERBOT')
 # ── Flask App ──────────────────────────────────────────────────────────
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'superbot-secret-key-change-me')
-app.config['VERSION'] = '5.5.37'
+app.config['VERSION'] = '5.5.38'
 app.config['EDITION'] = 'Mercedes'
 app.config['SUPPORTED_EXCHANGES'] = ['bingx', 'binance', 'bybit', 'okx']
 
@@ -172,6 +174,31 @@ class BotSettings(db.Model):
     key = db.Column(db.String(100), unique=True, nullable=False)
     value = db.Column(db.Text, nullable=True)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+class SentOrder(db.Model):
+    """Idempotent order tracking — prevents duplicate orders"""
+    __tablename__ = 'sent_orders'
+    id = db.Column(db.Integer, primary_key=True)
+    client_order_id = db.Column(db.String(100), unique=True, nullable=False, index=True)
+    exchange_id = db.Column(db.Integer, db.ForeignKey('exchanges.id'), nullable=False)
+    symbol = db.Column(db.String(50), nullable=False)
+    side = db.Column(db.String(10), nullable=False)
+    quantity = db.Column(db.Float, nullable=False)
+    price = db.Column(db.Float, nullable=True)
+    order_type = db.Column(db.String(20), nullable=False)
+    status = db.Column(db.String(20), default='SENT')
+    exchange_response = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            'id': self.id, 'client_order_id': self.client_order_id,
+            'exchange_id': self.exchange_id, 'symbol': self.symbol,
+            'side': self.side, 'quantity': self.quantity,
+            'price': self.price, 'order_type': self.order_type,
+            'status': self.status,
+            'created_at': self.created_at.isoformat() if self.created_at else None
+        }
 
 # ── Login Manager ──────────────────────────────────────────────────────
 login_manager = LoginManager()
@@ -450,7 +477,6 @@ class OKXClient:
         close_side = 'sell' if side == 'LONG' else 'buy'
         return self.place_order(symbol, close_side, 'market', 0)
 
-
 # ═══════════════════════════════════════════════════════════════════════
 # EXCHANGE MANAGER
 # ═══════════════════════════════════════════════════════════════════════
@@ -654,9 +680,8 @@ class SentimentAnalyzer:
             'fear_greed': fear_greed, 'timestamp': datetime.utcnow().isoformat()
         }
 
-
 # ═══════════════════════════════════════════════════════════════════════
-# TRADING ENGINE
+# TRADING ENGINE — REFACTORED (pure functions from core/parsers)
 # ═══════════════════════════════════════════════════════════════════════
 
 class TradingEngine:
@@ -718,194 +743,195 @@ class TradingEngine:
             if not client:
                 continue
             try:
-                balance = self._get_balance(client, ex['name'])
-                positions_data = self._get_positions(client, ex['name'])
-                self._sync_positions(exchange_id, positions_data)
+                # Use pure function parse_balance
+                balance_data = client.get_balance()
+                balance = parse_balance(balance_data, ex['name'])
+
+                # Use pure function parse_all_positions
+                positions_data = client.get_positions()
+                self._sync_positions(exchange_id, positions_data, ex['name'])
+
                 self._analyze_and_trade(exchange_id, client, balance, ex['name'])
             except Exception as e:
                 logger.error(f"Error processing exchange {exchange_id}: {e}")
 
-    def _get_balance(self, client, exchange_name):
+    def _sync_positions(self, exchange_id, data, exchange_name):
+        """Sync positions using pure parsers from core/parsers"""
         try:
-            if exchange_name == 'bingx':
-                data = client.get_balance()
-                if 'data' in data and 'balance' in data['data']:
-                    return float(data['data']['balance']['balance'])
-            elif exchange_name == 'binance':
-                data = client.get_balance()
-                for bal in data:
-                    if bal.get('asset') == 'USDT':
-                        return float(bal.get('balance', 0))
-            elif exchange_name == 'bybit':
-                data = client.get_balance()
-                if data.get('retCode') == 0:
-                    for acct in data.get('result', {}).get('list', []):
-                        for coin in acct.get('coin', []):
-                            if coin.get('coin') == 'USDT':
-                                return float(coin.get('walletBalance', 0))
-            elif exchange_name == 'okx':
-                data = client.get_balance()
-                if data.get('code') == '0':
-                    for bal in data.get('data', []):
-                        for detail in bal.get('details', []):
-                            if detail.get('ccy') == 'USDT':
-                                return float(detail.get('eq', 0))
-        except Exception as e:
-            logger.error(f"Balance error: {e}")
-        return 0.0
+            # Parse all positions with pure function
+            api_positions = parse_all_positions(data, exchange_name)
 
-    def _get_positions(self, client, exchange_name):
-        try:
-            if exchange_name == 'bingx':
-                return client.get_positions()
-            elif exchange_name == 'binance':
-                return {'data': client.get_positions()}
-            elif exchange_name == 'bybit':
-                data = client.get_positions()
-                if data.get('retCode') == 0:
-                    return {'data': data.get('result', {}).get('list', [])}
-            elif exchange_name == 'okx':
-                data = client.get_positions()
-                if data.get('code') == '0':
-                    return {'data': data.get('data', [])}
-        except Exception as e:
-            logger.error(f"Positions error: {e}")
-        return {'data': []}
-
-    def _sync_positions(self, exchange_id, data):
-        try:
-            api_positions = data.get('data', [])
             logger.info(f"Sync positions for exchange {exchange_id}: {len(api_positions)} positions found")
             if api_positions:
-                logger.info(f"First position sample: {json.dumps(api_positions[0], default=str)[:300]}")
-            db_positions = {p.symbol: p for p in Position.query.filter_by(exchange_id=exchange_id, status='OPEN').all()}
+                logger.info(f"First position sample: {json.dumps(api_positions[0])[:300]}")
+
+            db_positions = {
+                p.symbol: p for p in Position.query.filter_by(
+                    exchange_id=exchange_id, status='OPEN'
+                ).all()
+            }
+
             seen_symbols = set()
+
             for pos in api_positions:
-                symbol = pos.get('symbol') or pos.get('instId')
-                if not symbol:
-                    continue
+                symbol = pos['symbol']
                 seen_symbols.add(symbol)
-                side = self._parse_side(pos, exchange_id)
-                size = self._parse_size(pos, exchange_id)
-                pnl = self._parse_pnl(pos, exchange_id)
-                entry = self._parse_entry(pos, exchange_id)
+
                 if symbol in db_positions:
+                    # Update existing
                     existing = db_positions[symbol]
-                    existing.size = size
-                    existing.pnl = pnl
-                    existing.entry_price = entry
+                    existing.size = pos['size']
+                    existing.pnl = pos['pnl']
+                    existing.entry_price = pos['entry_price']
+                    existing.leverage = pos['leverage']
                 else:
+                    # Create new
                     new_pos = Position(
-                        exchange_id=exchange_id, symbol=symbol, side=side,
-                        entry_price=entry, size=size,
-                        leverage=int(pos.get('leverage', 5)), pnl=pnl, status='OPEN'
+                        exchange_id=exchange_id,
+                        symbol=symbol,
+                        side=pos['side'],
+                        entry_price=pos['entry_price'],
+                        size=pos['size'],
+                        leverage=pos['leverage'],
+                        pnl=pos['pnl'],
+                        status='OPEN'
                     )
                     db.session.add(new_pos)
+
+            # Mark closed positions
             for symbol, pos in db_positions.items():
                 if symbol not in seen_symbols:
                     pos.status = 'CLOSED'
                     pos.closed_at = datetime.utcnow()
                     self.risk_manager.update_daily_pnl(pos.pnl)
+
             db.session.commit()
         except Exception as e:
             db.session.rollback()
             logger.error(f"Position sync error: {e}")
 
-    def _parse_side(self, pos, exchange_name):
-        if exchange_name == 'bingx':
-            return 'LONG' if pos.get('positionSide') == 'LONG' else 'SHORT'
-        elif exchange_name == 'binance':
-            return 'LONG' if float(pos.get('positionAmt', 0)) > 0 else 'SHORT'
-        elif exchange_name == 'bybit':
-            return pos.get('side', 'LONG')
-        elif exchange_name == 'okx':
-            return 'LONG' if pos.get('posSide') == 'long' else 'SHORT'
-        return 'LONG'
-
-    def _parse_size(self, pos, exchange_name):
-        if exchange_name == 'bingx':
-            return abs(float(pos.get('positionAmt', 0)))
-        elif exchange_name == 'binance':
-            return abs(float(pos.get('positionAmt', 0)))
-        elif exchange_name == 'bybit':
-            return float(pos.get('size', 0))
-        elif exchange_name == 'okx':
-            return abs(float(pos.get('pos', 0)))
-        return 0.0
-
-    def _parse_pnl(self, pos, exchange_name):
-        if exchange_name == 'bingx':
-            return float(pos.get('unRealizedProfit', 0))
-        elif exchange_name == 'binance':
-            return float(pos.get('unRealizedProfit', 0))
-        elif exchange_name == 'bybit':
-            return float(pos.get('unrealisedPnl', 0))
-        elif exchange_name == 'okx':
-            return float(pos.get('upl', 0))
-        return 0.0
-
-    def _parse_entry(self, pos, exchange_name):
-        if exchange_name == 'bingx':
-            return float(pos.get('avgPrice', 0))
-        elif exchange_name == 'binance':
-            return float(pos.get('entryPrice', 0))
-        elif exchange_name == 'bybit':
-            return float(pos.get('avgPrice', 0))
-        elif exchange_name == 'okx':
-            return float(pos.get('avgPx', 0))
-        return 0.0
-
     def _analyze_and_trade(self, exchange_id, client, balance, exchange_name):
         symbols = ['BTC-USDT', 'ETH-USDT']
         for symbol in symbols:
             try:
-                klines = self._get_klines(client, exchange_name, symbol)
-                if not klines:
+                # Use pure function parse_klines_bingx
+                klines_data = client.get_klines(symbol, interval='1h', limit=100)
+                candles = parse_klines_bingx(klines_data)
+
+                if not candles:
                     continue
-                signal = self.ema_strategy.analyze(klines)
+
+                signal = self.ema_strategy.analyze(candles)
+
                 if signal['signal'] != 'NEUTRAL' and signal['confidence'] > 60:
                     self._execute_signal(exchange_id, client, symbol, signal, balance, exchange_name)
             except Exception as e:
                 logger.error(f"Analysis error for {symbol}: {e}")
 
-    def _get_klines(self, client, exchange_name, symbol):
-        try:
-            if exchange_name == 'bingx':
-                data = client.get_klines(symbol, interval='1h', limit=100)
-                if 'data' in data:
-                    return [{'open': float(k[1]), 'high': float(k[2]), 'low': float(k[3]), 'close': float(k[4]), 'volume': float(k[5])} for k in data['data']]
-            elif exchange_name == 'binance':
-                # Binance klines format
-                pass
-        except Exception as e:
-            logger.error(f"Klines error: {e}")
-        return []
-
     def _execute_signal(self, exchange_id, client, symbol, signal, balance, exchange_name):
         side = signal['signal']
-        current_positions = Position.query.filter_by(exchange_id=exchange_id, status='OPEN').count()
+        current_price = signal['price']
+
+        # Risk check
+        current_positions = Position.query.filter_by(
+            exchange_id=exchange_id, status='OPEN'
+        ).count()
+
         position_size = balance * 0.02
-        can_trade, reason = self.risk_manager.can_open_position(balance, position_size, current_positions)
+        can_trade, reason = self.risk_manager.can_open_position(
+            balance, position_size, current_positions
+        )
+
         if not can_trade:
             logger.info(f"Risk block: {reason}")
             return
-        current_price = signal['price']
+
+        # Calculate SL/TP
         sl_tp = self.risk_manager.calculate_sl_tp(current_price, side)
         leverage = self.risk_manager.config['max_leverage']
-        logger.info(f"Placing {side} order for {symbol} at {current_price} on {exchange_name}")
+
+        # ── IDEMPOTENCY CHECK ──────────────────────────────────────────
+        client_order_id = self._generate_client_order_id(
+            exchange_id, symbol, side, current_price
+        )
+
+        existing = SentOrder.query.filter_by(
+            client_order_id=client_order_id
+        ).first()
+
+        if existing:
+            logger.warning(
+                f"IDEMPOTENCY BLOCK: Order {client_order_id} already sent. "
+                f"Skipping duplicate for {symbol} {side}"
+            )
+            return
+
+        logger.info(f"Placing {side} order for {symbol} at {current_price}")
+
+        # DEMO mode
         if hasattr(client, 'demo') and client.demo:
             logger.info(f"[DEMO] Would place order: {symbol} {side} @ {current_price}")
+            self._record_sent_order(
+                client_order_id, exchange_id, symbol, side,
+                round(position_size / current_price, 4),
+                current_price, 'MARKET', {'demo': True}
+            )
             return
-        # Execute based on exchange
+
+        # Execute order
         try:
             if exchange_name == 'bingx':
                 client.set_leverage(symbol, leverage)
-                client.place_order(symbol=symbol, side='BUY' if side == 'LONG' else 'SELL',
-                    position_side=side, order_type='MARKET',
+                result = client.place_order(
+                    symbol=symbol,
+                    side='BUY' if side == 'LONG' else 'SELL',
+                    position_side=side,
+                    order_type='MARKET',
                     quantity=round(position_size / current_price, 4),
-                    stop_loss=sl_tp['stop_loss'], take_profit=sl_tp['take_profit_1'], leverage=leverage)
+                    stop_loss=sl_tp['stop_loss'],
+                    take_profit=sl_tp['take_profit_1'],
+                    leverage=leverage
+                )
+
+                # Record sent order
+                self._record_sent_order(
+                    client_order_id, exchange_id, symbol, side,
+                    round(position_size / current_price, 4),
+                    current_price, 'MARKET', result
+                )
+
+                logger.info(f"Order result: {result}")
         except Exception as e:
             logger.error(f"Order error: {e}")
+
+    def _generate_client_order_id(self, exchange_id, symbol, side, price):
+        """Generate deterministic order ID for idempotency"""
+        timestamp_minute = int(datetime.utcnow().timestamp() / 60)
+        raw = f"{exchange_id}_{symbol}_{side}_{price:.2f}_{timestamp_minute}"
+        hash_suffix = hashlib.md5(raw.encode()).hexdigest()[:8]
+        return f"SB_{exchange_id}_{symbol}_{side}_{hash_suffix}"
+
+    def _record_sent_order(self, client_order_id, exchange_id, symbol,
+                          side, quantity, price, order_type, response):
+        """Record sent order to prevent duplicates"""
+        try:
+            order = SentOrder(
+                client_order_id=client_order_id,
+                exchange_id=exchange_id,
+                symbol=symbol,
+                side=side,
+                quantity=quantity,
+                price=price,
+                order_type=order_type,
+                status='SENT',
+                exchange_response=str(response) if response else None
+            )
+            db.session.add(order)
+            db.session.commit()
+            logger.info(f"Recorded sent order: {client_order_id}")
+        except Exception as e:
+            db.session.rollback()
+            logger.error(f"Failed to record sent order: {e}")
 
     def get_status(self):
         return {
@@ -926,7 +952,6 @@ class TradingEngine:
 # Initialize
 engine = TradingEngine(app)
 sentiment_analyzer = SentimentAnalyzer()
-
 
 # ═══════════════════════════════════════════════════════════════════════
 # ROUTES: AUTH
@@ -1051,77 +1076,11 @@ def get_live_positions():
         if not client:
             continue
         try:
-            if ex.name == 'bingx':
-                data = client.get_positions()
-                logger.info(f"BingX positions raw response: {json.dumps(data, default=str)[:500]}")
-                if 'data' in data:
-                    for pos in data['data']:
-                        # Try different field names that BingX might use
-                        symbol = pos.get('symbol') or pos.get('instId') or pos.get('s') or 'UNKNOWN'
-                        position_amt = pos.get('positionAmt') or pos.get('positionAmt') or pos.get('availPos') or pos.get('size') or '0'
-                        avg_price = pos.get('avgPrice') or pos.get('entryPrice') or pos.get('avgPx') or pos.get('ep') or '0'
-                        unrealized_pnl = pos.get('unRealizedProfit') or pos.get('unrealizedProfit') or pos.get('upl') or pos.get('upnl') or '0'
-                        leverage = pos.get('leverage') or pos.get('lever') or pos.get('l') or '5'
-                        position_side = pos.get('positionSide') or pos.get('posSide') or pos.get('side') or 'LONG'
-
-                        try:
-                            size_val = abs(float(position_amt))
-                            entry_val = float(avg_price)
-                            pnl_val = float(unrealized_pnl)
-                            lev_val = int(float(leverage))
-                        except (ValueError, TypeError):
-                            size_val = 0.0
-                            entry_val = 0.0
-                            pnl_val = 0.0
-                            lev_val = 5
-
-                        side_str = 'LONG' if str(position_side).upper() in ('LONG', 'BUY', '1') else 'SHORT'
-
-                        all_positions.append({
-                            'symbol': symbol, 'exchange_id': ex.id,
-                            'side': side_str,
-                            'entry_price': entry_val,
-                            'size': size_val,
-                            'leverage': lev_val,
-                            'pnl': pnl_val
-                        })
-            elif ex.name == 'binance':
-                data = client.get_positions()
-                for pos in data:
-                    amt = float(pos.get('positionAmt', 0))
-                    if amt != 0:
-                        all_positions.append({
-                            'symbol': pos.get('symbol'), 'exchange_id': ex.id,
-                            'side': 'LONG' if amt > 0 else 'SHORT',
-                            'entry_price': float(pos.get('entryPrice', 0)),
-                            'size': abs(amt), 'leverage': int(pos.get('leverage', 5)),
-                            'pnl': float(pos.get('unRealizedProfit', 0))
-                        })
-            elif ex.name == 'bybit':
-                data = client.get_positions()
-                if data.get('retCode') == 0:
-                    for pos in data.get('result', {}).get('list', []):
-                        size = float(pos.get('size', 0))
-                        if size != 0:
-                            all_positions.append({
-                                'symbol': pos.get('symbol'), 'exchange_id': ex.id,
-                                'side': pos.get('side', 'LONG'),
-                                'entry_price': float(pos.get('avgPrice', 0)),
-                                'size': size, 'leverage': int(pos.get('leverage', 5)),
-                                'pnl': float(pos.get('unrealisedPnl', 0))
-                            })
-            elif ex.name == 'okx':
-                data = client.get_positions()
-                if data.get('code') == '0':
-                    for pos in data.get('data', []):
-                        all_positions.append({
-                            'symbol': pos.get('instId'), 'exchange_id': ex.id,
-                            'side': 'LONG' if pos.get('posSide') == 'long' else 'SHORT',
-                            'entry_price': float(pos.get('avgPx', 0)),
-                            'size': abs(float(pos.get('pos', 0))),
-                            'leverage': int(pos.get('lever', 5)),
-                            'pnl': float(pos.get('upl', 0))
-                        })
+            data = client.get_positions()
+            parsed = parse_all_positions(data, ex.name)
+            for pos in parsed:
+                pos['exchange_id'] = ex.id
+                all_positions.append(pos)
         except Exception as e:
             logger.error(f"Live positions error for {ex.name}: {e}")
     return jsonify(all_positions)
@@ -1194,30 +1153,8 @@ def get_balance():
         if not client:
             continue
         try:
-            bal = 0
-            if ex.name == 'bingx':
-                data = client.get_balance()
-                if 'data' in data and 'balance' in data['data']:
-                    bal = float(data['data']['balance']['balance'])
-            elif ex.name == 'binance':
-                data = client.get_balance()
-                for b in data:
-                    if b.get('asset') == 'USDT':
-                        bal = float(b.get('balance', 0))
-            elif ex.name == 'bybit':
-                data = client.get_balance()
-                if data.get('retCode') == 0:
-                    for acct in data.get('result', {}).get('list', []):
-                        for coin in acct.get('coin', []):
-                            if coin.get('coin') == 'USDT':
-                                bal = float(coin.get('walletBalance', 0))
-            elif ex.name == 'okx':
-                data = client.get_balance()
-                if data.get('code') == '0':
-                    for bal_data in data.get('data', []):
-                        for detail in bal_data.get('details', []):
-                            if detail.get('ccy') == 'USDT':
-                                bal = float(detail.get('eq', 0))
+            data = client.get_balance()
+            bal = parse_balance(data, ex.name)
             balances[ex.name] = {'total': bal, 'available': bal}
             total += bal
         except Exception as e:
@@ -1231,7 +1168,11 @@ def get_balance():
 
 @app.route('/health')
 def health():
-    return jsonify({'status': 'ok', 'version': app.config['VERSION'], 'timestamp': datetime.utcnow().isoformat()})
+    return jsonify({
+        'status': 'ok',
+        'version': app.config['VERSION'],
+        'timestamp': datetime.utcnow().isoformat()
+    })
 
 
 # ═══════════════════════════════════════════════════════════════════════
