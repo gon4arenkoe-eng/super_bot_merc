@@ -1,7 +1,8 @@
 """SUPERBOT v5.5.36 - Risk Management Engine"""
 import logging
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 from dataclasses import dataclass
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
@@ -30,10 +31,21 @@ class RiskManager:
         self.config = config or RiskConfig()
         self.daily_pnl = 0.0
         self.positions_count = 0
+        self._last_reset_date = datetime.now().date()
+
+    def _check_and_reset_daily_pnl(self):
+        """Сбросить daily_pnl если наступил новый день"""
+        today = datetime.now().date()
+        if today != self._last_reset_date:
+            logger.info(f"New day: {self._last_reset_date} → {today}. Resetting daily PnL.")
+            self.daily_pnl = 0.0
+            self._last_reset_date = today
 
     def can_open_position(self, balance: float, position_size: float, 
-                         current_positions: int) -> tuple[bool, str]:
+                         current_positions: int) -> Tuple[bool, str]:
         """Check if new position can be opened"""
+        self._check_and_reset_daily_pnl()
+        
         if current_positions >= self.config.max_positions:
             return False, f"Max positions reached ({self.config.max_positions})"
 
@@ -94,12 +106,14 @@ class RiskManager:
 
     def update_daily_pnl(self, pnl: float):
         """Update daily PnL tracking"""
+        self._check_and_reset_daily_pnl()
         self.daily_pnl += pnl
         logger.info(f"Daily PnL updated: {self.daily_pnl:.2f} USDT")
 
     def reset_daily_pnl(self):
         """Reset daily PnL (call at midnight)"""
         self.daily_pnl = 0.0
+        self._last_reset_date = datetime.now().date()
         logger.info("Daily PnL reset")
 
     def validate_leverage(self, leverage: int) -> int:
