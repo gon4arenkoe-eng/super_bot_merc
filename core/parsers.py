@@ -1,4 +1,4 @@
-"""SUPERBOT v5.5.39 - Pure parsing functions for all exchanges (FIXED)"""
+"""SUPERBOT v5.5.39 - Pure parsing functions for all exchanges (FIXED v2)"""
 from typing import Dict, List
 import logging
 
@@ -122,30 +122,78 @@ def parse_position_okx(pos: Dict) -> Dict:
 
 
 def parse_klines_bingx(data) -> List[Dict]:
-    """Parse klines from BingX. Pure function. FIXED: type safety."""
+    """
+    Parse klines from BingX. Pure function. FIXED v2: handles dict/list/None.
+
+    BingX API can return data['data'] as:
+    - list: [[timestamp, open, high, low, close, volume], ...]
+    - dict: {"0": [...], "1": [...]} (rare, but happens)
+    - None: when no data
+    """
     candles = []
 
-    # FIX: Check if data is a dict
+    # Must be a dict
     if not isinstance(data, dict):
         logger.warning(f"parse_klines_bingx: expected dict, got {type(data).__name__}: {data}")
         return candles
 
-    if 'data' not in data:
-        logger.warning(f"parse_klines_bingx: no 'data' key in response: {data}")
+    # Check for API error
+    if 'error' in data:
+        logger.warning(f"parse_klines_bingx: API error in response: {data['error']}")
         return candles
 
-    try:
-        for k in data['data']:
-            candles.append({
-                'open': float(k[1]),
-                'high': float(k[2]),
-                'low': float(k[3]),
-                'close': float(k[4]),
-                'volume': float(k[5])
-            })
-    except (IndexError, TypeError, ValueError) as e:
-        logger.warning(f"parse_klines_bingx: parse error: {e}")
-        pass
+    # Check for BingX error code
+    code = data.get('code')
+    if code is not None and code != 0:
+        logger.warning(f"parse_klines_bingx: BingX error code={code}, msg={data.get('msg')}")
+        return candles
+
+    if 'data' not in data:
+        logger.warning(f"parse_klines_bingx: no 'data' key in response: {list(data.keys())}")
+        return candles
+
+    raw_data = data['data']
+
+    # FIX: data['data'] can be None
+    if raw_data is None:
+        logger.info("parse_klines_bingx: data['data'] is None, no candles available")
+        return candles
+
+    # FIX: data['data'] can be dict instead of list
+    if isinstance(raw_data, dict):
+        logger.info(f"parse_klines_bingx: data['data'] is dict with {len(raw_data)} keys, converting to list")
+        raw_data = list(raw_data.values())
+
+    # Must be a list now
+    if not isinstance(raw_data, list):
+        logger.warning(f"parse_klines_bingx: data['data'] is {type(raw_data).__name__}, expected list")
+        return candles
+
+    for k in raw_data:
+        try:
+            # k can be list [timestamp, open, high, low, close, volume]
+            # or dict {"open": ..., "high": ...}
+            if isinstance(k, list):
+                candles.append({
+                    'open': float(k[1]),
+                    'high': float(k[2]),
+                    'low': float(k[3]),
+                    'close': float(k[4]),
+                    'volume': float(k[5])
+                })
+            elif isinstance(k, dict):
+                candles.append({
+                    'open': float(k.get('open', k.get('o', 0))),
+                    'high': float(k.get('high', k.get('h', 0))),
+                    'low': float(k.get('low', k.get('l', 0))),
+                    'close': float(k.get('close', k.get('c', 0))),
+                    'volume': float(k.get('volume', k.get('v', 0)))
+                })
+        except (IndexError, TypeError, ValueError, KeyError) as e:
+            logger.debug(f"parse_klines_bingx: skip invalid candle {k}: {e}")
+            continue
+
+    logger.info(f"parse_klines_bingx: parsed {len(candles)} candles")
     return candles
 
 
