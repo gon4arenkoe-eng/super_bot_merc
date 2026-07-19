@@ -1,5 +1,8 @@
-"""SUPERBOT v5.5.38 - Pure parsing functions for all exchanges"""
+"""SUPERBOT v5.5.39 - Pure parsing functions for all exchanges (FIXED)"""
 from typing import Dict, List
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def parse_balance_bingx(data: Dict) -> float:
@@ -118,11 +121,19 @@ def parse_position_okx(pos: Dict) -> Dict:
         return None
 
 
-def parse_klines_bingx(data: Dict) -> List[Dict]:
-    """Parse klines from BingX. Pure function."""
+def parse_klines_bingx(data) -> List[Dict]:
+    """Parse klines from BingX. Pure function. FIXED: type safety."""
     candles = []
-    if 'data' not in data:
+
+    # FIX: Check if data is a dict
+    if not isinstance(data, dict):
+        logger.warning(f"parse_klines_bingx: expected dict, got {type(data).__name__}: {data}")
         return candles
+
+    if 'data' not in data:
+        logger.warning(f"parse_klines_bingx: no 'data' key in response: {data}")
+        return candles
+
     try:
         for k in data['data']:
             candles.append({
@@ -132,7 +143,8 @@ def parse_klines_bingx(data: Dict) -> List[Dict]:
                 'close': float(k[4]),
                 'volume': float(k[5])
             })
-    except (IndexError, TypeError, ValueError):
+    except (IndexError, TypeError, ValueError) as e:
+        logger.warning(f"parse_klines_bingx: parse error: {e}")
         pass
     return candles
 
@@ -140,7 +152,7 @@ def parse_klines_bingx(data: Dict) -> List[Dict]:
 def parse_all_positions(data, exchange_name: str) -> List[Dict]:
     """Parse all positions from exchange response. Pure function."""
     raw_positions = []
-    
+
     if exchange_name == 'bingx':
         raw_positions = data.get('data', []) if isinstance(data, dict) else []
         parser = parse_position_bingx
@@ -157,7 +169,7 @@ def parse_all_positions(data, exchange_name: str) -> List[Dict]:
         parser = parse_position_okx
     else:
         return []
-    
+
     result = []
     for pos in raw_positions:
         parsed = parser(pos)
