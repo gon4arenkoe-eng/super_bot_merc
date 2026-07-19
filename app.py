@@ -30,6 +30,8 @@ from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
 # ── Import pure functions from core/parsers ─────────────────────────────
 from core.parsers import parse_balance, parse_all_positions, parse_klines_bingx
+from core.strategies.ema_cross import EMAStrategy
+from core.sentiment.analyzer import SentimentAnalyzer
 
 # ── Logging ──────────────────────────────────────────────────────────────
 LOG_DIR = os.path.join(os.path.dirname(__file__), 'logs')
@@ -602,24 +604,7 @@ class RiskManager:
 # EMA STRATEGY
 # ═══════════════════════════════════════════════════════════════════════
 
-class EMAStrategy:
-    def __init__(self, fast_ema=9, slow_ema=21, trend_ema=50):
-        self.fast_ema = fast_ema
-        self.slow_ema = slow_ema
-        self.trend_ema = trend_ema
 
-    def calculate_ema(self, prices, period):
-        if len(prices) < period:
-            return []
-        multiplier = 2 / (period + 1)
-        ema = [prices[0]]
-        for price in prices[1:]:
-            ema.append((price - ema[-1]) * multiplier + ema[-1])
-        return ema
-
-    def analyze(self, candles):
-        if len(candles) < self.trend_ema + 5:
-            return {'signal': 'NEUTRAL', 'confidence': 0}
         closes = [c['close'] for c in candles]
         ema_fast = self.calculate_ema(closes, self.fast_ema)
         ema_slow = self.calculate_ema(closes, self.slow_ema)
@@ -648,37 +633,7 @@ class EMAStrategy:
 # SENTIMENT ANALYZER
 # ═══════════════════════════════════════════════════════════════════════
 
-class SentimentAnalyzer:
-    def __init__(self):
-        self.cache = {}
-        self.cache_time = 300
 
-    def get_fear_greed(self):
-        try:
-            resp = requests.get('https://api.alternative.me/fng/', timeout=10)
-            data = resp.json()
-            if 'data' in data and len(data['data']) > 0:
-                return {
-                    'value': int(data['data'][0]['value']),
-                    'classification': data['data'][0]['value_classification'],
-                    'timestamp': data['data'][0]['timestamp']
-                }
-        except Exception as e:
-            logger.error(f"Fear & Greed error: {e}")
-        return {'value': 50, 'classification': 'Neutral', 'timestamp': None}
-
-    def analyze(self, symbol='BTC'):
-        fear_greed = self.get_fear_greed()
-        score = fear_greed['value']
-        sentiment = 'neutral'
-        if score > 75: sentiment = 'extreme_greed'
-        elif score > 55: sentiment = 'greed'
-        elif score < 25: sentiment = 'extreme_fear'
-        elif score < 45: sentiment = 'fear'
-        return {
-            'overall_score': round(score, 1), 'sentiment': sentiment,
-            'fear_greed': fear_greed, 'timestamp': datetime.utcnow().isoformat()
-        }
 
 # ═══════════════════════════════════════════════════════════════════════
 # TRADING ENGINE — REFACTORED (pure functions from core/parsers)
