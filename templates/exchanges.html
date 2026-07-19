@@ -87,6 +87,69 @@
 
 {% block extra_js %}
 <script>
+// ── JWT Auth Check ──────────────────────────────────────────────
+const TOKEN_KEY = 'sb_access_token';
+const REFRESH_KEY = 'sb_refresh_token';
+
+function getToken() { return localStorage.getItem(TOKEN_KEY); }
+function getRefreshToken() { return localStorage.getItem(REFRESH_KEY); }
+
+async function apiFetch(url, options = {}) {
+  if (!options.headers) options.headers = {};
+  options.headers['Content-Type'] = 'application/json';
+  const token = getToken();
+  if (token) {
+    options.headers['Authorization'] = 'Bearer ' + token;
+  }
+  const res = await fetch(url, options);
+  if (res.status === 401 && getRefreshToken()) {
+    const refreshed = await refreshAccessToken();
+    if (refreshed) {
+      options.headers['Authorization'] = 'Bearer ' + getToken();
+      return fetch(url, options);
+    }
+  }
+  return res;
+}
+
+async function refreshAccessToken() {
+  const refreshToken = getRefreshToken();
+  if (!refreshToken) return false;
+  try {
+    const res = await fetch('/api/auth/refresh', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({refresh_token: refreshToken})
+    });
+    const data = await res.json();
+    if (data.success) {
+      localStorage.setItem(TOKEN_KEY, data.access_token);
+      localStorage.setItem(REFRESH_KEY, data.refresh_token);
+      return true;
+    }
+  } catch (e) {}
+  localStorage.removeItem(TOKEN_KEY);
+  localStorage.removeItem(REFRESH_KEY);
+  return false;
+}
+
+// Check auth on page load
+(async function checkAuth() {
+  const token = getToken();
+  if (!token) {
+    window.location.href = '/login';
+    return;
+  }
+  try {
+    const res = await apiFetch('/api/auth/me');
+    if (!res.ok) {
+      window.location.href = '/login';
+    }
+  } catch (e) {
+    window.location.href = '/login';
+  }
+})();
+
 document.addEventListener('DOMContentLoaded', loadExchanges);
 
 async function loadExchanges() {
@@ -94,7 +157,7 @@ async function loadExchanges() {
     container.innerHTML = '<div class="loading-state">Загрузка бирж...</div>';
 
     try {
-        const res = await fetch('/api/exchanges');
+        const res = await apiFetch('/api/exchanges');
         const data = await res.json();
         if (data.success) {
             renderExchanges(data.data || []);
