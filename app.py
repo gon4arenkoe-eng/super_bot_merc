@@ -555,13 +555,12 @@ class ExchangeManager:
         if not ex:
             return False
 
-        # FIX: Delete related positions and orders first (cascade delete)
+        # FIX: Delete related positions first (cascade delete)
         deleted_positions = Position.query.filter_by(exchange_id=exchange_id).delete()
-        deleted_orders = SentOrder.query.filter_by(exchange_id=exchange_id).delete()
 
         db.session.delete(ex)
         db.session.commit()
-        logger.info(f"Deleted exchange {exchange_id} (+{deleted_positions} positions, +{deleted_orders} orders)")
+        logger.info(f"Deleted exchange {exchange_id} (+{deleted_positions} positions)")
         return True
 
     @staticmethod
