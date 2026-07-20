@@ -312,26 +312,49 @@ async function addExchange(e) {
   const form = document.getElementById('addExchangeForm');
   let alertBox = document.getElementById('exchangeAlert');
   if (!alertBox) { alertBox = document.createElement('div'); alertBox.id = 'exchangeAlert'; alertBox.style.marginBottom = '15px'; form.insertBefore(alertBox, form.firstChild); }
+
   const nameEl = document.getElementById('exchangeName');
   const apiKeyEl = document.getElementById('apiKey');
   const apiSecretEl = document.getElementById('apiSecret');
   const passphraseEl = document.getElementById('passphrase');
   const isDemoEl = document.getElementById('isDemo');
+  const displayNameEl = document.getElementById('displayName');
+
+  // FIX: Handle null elements safely
+  const nameVal = nameEl && nameEl.value ? nameEl.value.toLowerCase() : '';
+  const displayNameVal = displayNameEl && displayNameEl.value ? displayNameEl.value.trim() : (nameVal || 'Exchange');
+  const apiKeyVal = apiKeyEl && apiKeyEl.value ? apiKeyEl.value.trim() : '';
+  const apiSecretVal = apiSecretEl && apiSecretEl.value ? apiSecretEl.value.trim() : '';
+  const passphraseVal = passphraseEl && passphraseEl.value ? passphraseEl.value.trim() : '';
+  const isDemoVal = isDemoEl ? isDemoEl.checked : true;
+
   const data = {
-    name: nameEl ? nameEl.value.toLowerCase() : '',
-    display_name: (document.getElementById('displayName')?.value || nameEl?.value || 'Exchange').trim(),
-    api_key: (apiKeyEl ? apiKeyEl.value : '').trim(),
-    api_secret: (apiSecretEl ? apiSecretEl.value : '').trim(),
-    passphrase: (passphraseEl ? passphraseEl.value : '').trim() || null,
-    is_demo: isDemoEl ? isDemoEl.checked : true
+    name: nameVal,
+    display_name: displayNameVal,
+    api_key: apiKeyVal,
+    api_secret: apiSecretVal,
+    passphrase: passphraseVal || null,
+    is_demo: isDemoVal
   };
-  if (!data.api_key || !data.api_secret) { alertBox.innerHTML = '<div style="background:rgba(255,85,119,0.15);color:#ff5577;border:1px solid rgba(255,85,119,0.3);padding:12px;border-radius:8px;">API Key and Secret are required</div>'; return false; }
+
+  if (!data.api_key || !data.api_secret) { 
+    alertBox.innerHTML = '<div style="background:rgba(255,85,119,0.15);color:#ff5577;border:1px solid rgba(255,85,119,0.3);padding:12px;border-radius:8px;">API Key and Secret are required</div>'; 
+    return false; 
+  }
+
   try {
     const resp = await apiFetch('/api/exchanges', { method: 'POST', body: JSON.stringify(data) });
     const result = await resp.json();
-    if (result.success) { alertBox.innerHTML = '<div style="background:rgba(0,229,160,0.15);color:#00e5a0;border:1px solid rgba(0,229,160,0.3);padding:12px;border-radius:8px;">Exchange added!</div>'; setTimeout(() => { hideModal('addExchangeModal'); location.reload(); }, 1000); }
-    else { alertBox.innerHTML = '<div style="background:rgba(255,85,119,0.15);color:#ff5577;border:1px solid rgba(255,85,119,0.3);padding:12px;border-radius:8px;">' + (result.error || 'Failed') + '</div>'; }
-  } catch (err) { alertBox.innerHTML = '<div style="background:rgba(255,85,119,0.15);color:#ff5577;border:1px solid rgba(255,85,119,0.3);padding:12px;border-radius:8px;">Network error</div>'; }
+    if (result.success) { 
+      alertBox.innerHTML = '<div style="background:rgba(0,229,160,0.15);color:#00e5a0;border:1px solid rgba(0,229,160,0.3);padding:12px;border-radius:8px;">Exchange added!</div>'; 
+      setTimeout(() => { hideModal('addExchangeModal'); location.reload(); }, 1000); 
+    }
+    else { 
+      alertBox.innerHTML = '<div style="background:rgba(255,85,119,0.15);color:#ff5577;border:1px solid rgba(255,85,119,0.3);padding:12px;border-radius:8px;">' + (result.error || 'Failed') + '</div>'; 
+    }
+  } catch (err) { 
+    alertBox.innerHTML = '<div style="background:rgba(255,85,119,0.15);color:#ff5577;border:1px solid rgba(255,85,119,0.3);padding:12px;border-radius:8px;">Network error: ' + err.message + '</div>'; 
+  }
   return false;
 }
 </script>
