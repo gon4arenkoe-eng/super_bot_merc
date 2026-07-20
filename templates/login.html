@@ -1,367 +1,397 @@
-{% extends "base.html" %}
-
-{% block title %}SUPERBOT - Управление биржами{% endblock %}
-
-{% block content %}
-<div class="page-container">
-    <div class="page-header">
-        <div>
-            <h1>Управление биржами</h1>
-            <p class="page-subtitle">Добавьте API ключи для торговли</p>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SUPERBOT v5.6.0 — Login</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background: #0a0e1a;
+            color: #e0e6ed;
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .login-container {
+            background: rgba(15, 23, 42, 0.95);
+            border: 1px solid rgba(56, 189, 248, 0.2);
+            border-radius: 16px;
+            padding: 48px;
+            width: 100%;
+            max-width: 420px;
+            box-shadow: 0 0 40px rgba(56, 189, 248, 0.1);
+        }
+        .logo {
+            text-align: center;
+            margin-bottom: 32px;
+        }
+        .logo h1 {
+            font-size: 28px;
+            font-weight: 700;
+            background: linear-gradient(135deg, #38bdf8, #818cf8);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            letter-spacing: 2px;
+        }
+        .logo .version {
+            color: #64748b;
+            font-size: 12px;
+            margin-top: 4px;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            color: #94a3b8;
+            font-size: 13px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .form-group input {
+            width: 100%;
+            padding: 12px 16px;
+            background: rgba(30, 41, 59, 0.8);
+            border: 1px solid rgba(56, 189, 248, 0.2);
+            border-radius: 8px;
+            color: #e0e6ed;
+            font-size: 15px;
+            transition: all 0.2s;
+        }
+        .form-group input:focus {
+            outline: none;
+            border-color: #38bdf8;
+            box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.1);
+        }
+        .btn {
+            width: 100%;
+            padding: 14px;
+            background: linear-gradient(135deg, #38bdf8, #818cf8);
+            border: none;
+            border-radius: 8px;
+            color: #0a0e1a;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            margin-top: 8px;
+        }
+        .btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 20px rgba(56, 189, 248, 0.3);
+        }
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+        .btn-secondary {
+            background: transparent;
+            border: 1px solid rgba(56, 189, 248, 0.3);
+            color: #38bdf8;
+        }
+        .btn-secondary:hover {
+            background: rgba(56, 189, 248, 0.1);
+        }
+        .error {
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            color: #f87171;
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 16px;
+            font-size: 13px;
+            display: none;
+        }
+        .success {
+            background: rgba(34, 197, 94, 0.1);
+            border: 1px solid rgba(34, 197, 94, 0.3);
+            color: #4ade80;
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 16px;
+            font-size: 13px;
+            display: none;
+        }
+        .toggle-mode {
+            text-align: center;
+            margin-top: 20px;
+            color: #64748b;
+            font-size: 13px;
+        }
+        .toggle-mode a {
+            color: #38bdf8;
+            cursor: pointer;
+            text-decoration: none;
+        }
+        .toggle-mode a:hover {
+            text-decoration: underline;
+        }
+        .divider {
+            display: flex;
+            align-items: center;
+            margin: 24px 0;
+            color: #475569;
+            font-size: 12px;
+        }
+        .divider::before, .divider::after {
+            content: '';
+            flex: 1;
+            height: 1px;
+            background: rgba(148, 163, 184, 0.2);
+        }
+        .divider span {
+            padding: 0 12px;
+        }
+        .hidden { display: none !important; }
+    </style>
+<base target="_blank">
+</head>
+<body>
+    <div class="login-container">
+        <div class="logo">
+            <h1>SUPERBOT</h1>
+            <div class="version">v5.6.0 Mercedes Edition — JWT Auth</div>
         </div>
-        <button class="btn btn-primary" onclick="openAddModal()">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <line x1="12" y1="5" x2="12" y2="19"/>
-                <line x1="5" y1="12" x2="19" y2="12"/>
-            </svg>
-            Добавить биржу
-        </button>
-    </div>
 
-    <!-- Exchanges Grid -->
-    <div class="exchanges-grid" id="exchangesList">
-        <div class="loading-state">Загрузка...</div>
-    </div>
-</div>
+        <div class="error" id="errorMsg"></div>
+        <div class="success" id="successMsg"></div>
 
-<!-- Modal: Add Exchange -->
-<div class="modal" id="addModal">
-    <div class="modal-overlay" onclick="closeAddModal()"></div>
-    <div class="modal-content">
-        <div class="modal-header">
-            <h3>Добавить биржу</h3>
-            <button class="modal-close" onclick="closeAddModal()">&times;</button>
-        </div>
-        <form id="addExchangeForm" onsubmit="return addExchange(event)">
+        <!-- LOGIN FORM -->
+        <form id="loginForm">
             <div class="form-group">
-                <label>Биржа <span class="required">*</span></label>
-                <select id="exchangeName" name="name" required>
-                    <option value="">Выберите биржу</option>
-                    {% for ex in supported %}
-                    <option value="{{ ex }}">{{ ex|upper }}</option>
-                    {% endfor %}
-                </select>
+                <label>Username</label>
+                <input type="text" id="loginUsername" placeholder="Enter username" required autocomplete="username">
             </div>
             <div class="form-group">
-                <label>Название <span class="required">*</span></label>
-                <input type="text" name="display_name" placeholder="Например: Моя BingX" required>
+                <label>Password</label>
+                <input type="password" id="loginPassword" placeholder="Enter password" required autocomplete="current-password">
             </div>
-            <div class="form-group">
-                <label>API Key <span class="required">*</span></label>
-                <input type="password" id="apiKey" name="api_key" placeholder="Введите API Key" required>
-            </div>
-            <div class="form-group">
-                <label>API Secret <span class="required">*</span></label>
-                <input type="password" id="apiSecret" name="api_secret" placeholder="Введите API Secret" required>
-            </div>
-            <div class="form-group">
-                <label>Passphrase <span class="hint">(только для OKX)</span></label>
-                <input type="password" id="passphrase" name="passphrase" placeholder="Введите Passphrase">
-            </div>
-            <div class="form-group form-toggle">
-                <label class="toggle">
-                    <input type="checkbox" id="isDemo" name="is_demo" checked>
-                    <span class="toggle-slider"></span>
-                    <span class="toggle-label">DEMO режим (VST / Paper Trading)</span>
-                </label>
-            </div>
-            <div class="form-hint">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <circle cx="12" cy="12" r="10"/>
-                    <line x1="12" y1="16" x2="12" y2="12"/>
-                    <line x1="12" y1="8" x2="12.01" y2="8"/>
-                </svg>
-                API ключи шифруются перед сохранением в базу данных
-            </div>
-            <div class="form-actions">
-                <button type="button" class="btn btn-secondary" onclick="closeAddModal()">Отмена</button>
-                <button type="submit" class="btn btn-primary">Сохранить</button>
-            </div>
+            <button type="submit" class="btn" id="loginBtn">Sign In</button>
         </form>
-    </div>
-</div>
 
-<!-- Toast Notification -->
-<div class="toast" id="toast"></div>
-{% endblock %}
-
-{% block extra_js %}
-<script>
-document.addEventListener('DOMContentLoaded', loadExchanges);
-
-async function loadExchanges() {
-    const container = document.getElementById('exchangesList');
-    container.innerHTML = '<div class="loading-state">Загрузка бирж...</div>';
-
-    try {
-        const res = await fetch('/api/exchanges');
-        const data = await res.json();
-        if (data.success) {
-            renderExchanges(data.data || []);
-        } else {
-            container.innerHTML = '<div class="empty-state">Ошибка загрузки</div>';
-        }
-    } catch (e) {
-        container.innerHTML = '<div class="empty-state">Ошибка соединения</div>';
-    }
-}
-
-function renderExchanges(exchanges) {
-    const container = document.getElementById('exchangesList');
-    if (!exchanges.length) {
-        container.innerHTML = `
-            <div class="empty-state">
-                <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1">
-                    <path d="M12 2L2 7l10 5 10-5-10-5z"/>
-                    <path d="M2 17l10 5 10-5"/>
-                    <path d="M2 12l10 5 10-5"/>
-                </svg>
-                <h3>Нет добавленных бирж</h3>
-                <p>Нажмите "Добавить биржу" чтобы начать</p>
+        <!-- REGISTER FORM (hidden by default) -->
+        <form id="registerForm" class="hidden">
+            <div class="form-group">
+                <label>Username</label>
+                <input type="text" id="regUsername" placeholder="Choose username" required autocomplete="username">
             </div>
-        `;
-        return;
-    }
+            <div class="form-group">
+                <label>Password</label>
+                <input type="password" id="regPassword" placeholder="Min 6 characters" required autocomplete="new-password">
+            </div>
+            <div class="form-group">
+                <label>Confirm Password</label>
+                <input type="password" id="regPassword2" placeholder="Repeat password" required>
+            </div>
+            <button type="submit" class="btn" id="regBtn">Create Account</button>
+        </form>
 
-    container.innerHTML = exchanges.map(ex => `
-        <div class="exchange-card ${ex.is_active ? 'active' : 'inactive'}">
-            <div class="exchange-header">
-                <div class="exchange-icon ${ex.name}">${ex.name.substring(0,2).toUpperCase()}</div>
-                <div class="exchange-info">
-                    <h4>${escapeHtml(ex.display_name)}</h4>
-                    <span class="exchange-name">${ex.name.toUpperCase()}</span>
-                </div>
-                <div class="exchange-badges">
-                    <span class="badge ${ex.is_demo ? 'demo' : 'real'}">${ex.is_demo ? 'DEMO' : 'REAL'}</span>
-                    <span class="badge ${ex.is_active ? 'status-online' : 'status-offline'}">${ex.is_active ? 'Активна' : 'Выключена'}</span>
-                </div>
-            </div>
-            <div class="exchange-details">
-                <div class="detail-row">
-                    <span class="detail-label">API Key</span>
-                    <code class="detail-value">${ex.api_key_masked || '***'}</code>
-                </div>
-                <div class="detail-row">
-                    <span class="detail-label">Добавлена</span>
-                    <span class="detail-value">${formatDate(ex.created_at)}</span>
-                </div>
-                <div class="detail-row">
-                    <span class="detail-label">Обновлена</span>
-                    <span class="detail-value">${formatDate(ex.updated_at)}</span>
-                </div>
-            </div>
-            <div class="exchange-actions">
-                <button class="btn btn-sm ${ex.is_active ? 'btn-warning' : 'btn-success'}" 
-                        onclick="toggleExchange(${ex.id})">
-                    ${ex.is_active ? 'Выключить' : 'Включить'}
-                </button>
-                <button class="btn btn-sm btn-danger" onclick="deleteExchange(${ex.id})">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <polyline points="3 6 5 6 21 6"/>
-                        <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
-                    </svg>
-                    Удалить
-                </button>
-            </div>
+        <div class="divider"><span>or</span></div>
+
+        <button class="btn btn-secondary" id="toggleBtn" onclick="toggleMode()">New user? Register</button>
+
+        <div class="toggle-mode">
+            <span id="toggleText">Don't have an account?</span>
+            <a onclick="toggleMode()" id="toggleLink">Register</a>
         </div>
-    `).join('');
-}
+    </div>
 
-function openAddModal() {
-    document.getElementById('addModal').classList.add('show');
-    document.body.style.overflow = 'hidden';
-}
+    <script>
+        // ── JWT Token Management ──────────────────────────────────────
+        const TOKEN_KEY = 'sb_access_token';
+        const REFRESH_KEY = 'sb_refresh_token';
 
-function closeAddModal() {
-    document.getElementById('addModal').classList.remove('show');
-    document.body.style.overflow = '';
-}
-
-document.getElementById('addExchangeForm').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const form = e.target;
-    const formData = new FormData(form);
-    const data = {
-        name: formData.get('name'),
-        display_name: formData.get('display_name').trim(),
-        api_key: formData.get('api_key').trim(),
-        api_secret: formData.get('api_secret').trim(),
-        passphrase: formData.get('passphrase')?.trim() || null,
-        is_demo: formData.has('is_demo')
-    };
-
-    if (!data.name || !data.display_name || !data.api_key || !data.api_secret) {
-        showToast('Заполните все обязательные поля', 'error');
-        return;
-    }
-
-    try {
-        const res = await fetch('/api/exchanges', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify(data)
-        });
-        const result = await res.json();
-        if (result.success) {
-            showToast('Биржа добавлена!', 'success');
-            closeAddModal();
-            form.reset();
-            loadExchanges();
-        } else {
-            showToast(result.error || 'Ошибка сохранения', 'error');
+        function getToken() { return localStorage.getItem(TOKEN_KEY); }
+        function setToken(token) { localStorage.setItem(TOKEN_KEY, token); }
+        function getRefreshToken() { return localStorage.getItem(REFRESH_KEY); }
+        function setRefreshToken(token) { localStorage.setItem(REFRESH_KEY, token); }
+        function clearTokens() {
+            localStorage.removeItem(TOKEN_KEY);
+            localStorage.removeItem(REFRESH_KEY);
         }
-    } catch (e) {
-        showToast('Ошибка соединения', 'error');
-    }
-});
 
-async function toggleExchange(id) {
-    try {
-        const res = await fetch(`/api/exchanges/${id}/toggle`, {method: 'POST'});
-        const data = await res.json();
-        if (data.success) {
-            showToast(data.data.is_active ? 'Биржа включена' : 'Биржа выключена', 'success');
-            loadExchanges();
-        } else {
-            showToast(data.error || 'Ошибка', 'error');
+        // ── Cookie Helpers ────────────────────────────────────────────
+        function setCookie(name, value, days) {
+            const expires = new Date(Date.now() + days * 864e5).toUTCString();
+            document.cookie = name + '=' + encodeURIComponent(value) + '; expires=' + expires + '; path=/; SameSite=Lax';
         }
-    } catch (e) {
-        showToast('Ошибка соединения', 'error');
-    }
-}
-
-async function deleteExchange(id) {
-    if (!confirm('Удалить биржу? Это действие нельзя отменить.')) return;
-    try {
-        const res = await fetch(`/api/exchanges/${id}`, {method: 'DELETE'});
-        const data = await res.json();
-        if (data.success) {
-            showToast('Биржа удалена', 'success');
-            loadExchanges();
-        } else {
-            showToast(data.error || 'Ошибка удаления', 'error');
+        function deleteCookie(name) {
+            document.cookie = name + '=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/';
         }
-    } catch (e) {
-        showToast('Ошибка соединения', 'error');
-    }
-}
 
-function showToast(message, type = 'info') {
-    const toast = document.getElementById('toast');
-    toast.textContent = message;
-    toast.className = `toast show ${type}`;
-    setTimeout(() => toast.classList.remove('show'), 3000);
-}
+        // ── API Helper with JWT ───────────────────────────────────────
+        async function apiFetch(url, options = {}) {
+            if (!options.headers) options.headers = {};
+            options.headers['Content-Type'] = 'application/json';
+            const token = getToken();
+            if (token) {
+                options.headers['Authorization'] = 'Bearer ' + token;
+            }
+            const res = await fetch(url, options);
+            if (res.status === 401 && getRefreshToken()) {
+                const refreshed = await refreshAccessToken();
+                if (refreshed) {
+                    options.headers['Authorization'] = 'Bearer ' + getToken();
+                    return fetch(url, options);
+                }
+            }
+            return res;
+        }
 
-function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-}
+        async function refreshAccessToken() {
+            const refreshToken = getRefreshToken();
+            if (!refreshToken) return false;
+            try {
+                const res = await fetch('/api/auth/refresh', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({refresh_token: refreshToken})
+                });
+                const data = await res.json();
+                if (data.success) {
+                    setToken(data.access_token);
+                    setRefreshToken(data.refresh_token);
+                    setCookie('access_token', data.access_token, 1);
+                    setCookie('refresh_token', data.refresh_token, 7);
+                    return true;
+                }
+            } catch (e) {
+                console.error('Refresh failed:', e);
+            }
+            clearTokens();
+            deleteCookie('access_token');
+            deleteCookie('refresh_token');
+            return false;
+        }
 
-function formatDate(dateStr) {
-    if (!dateStr) return '-';
-    const d = new Date(dateStr);
-    return d.toLocaleDateString('ru-RU', {day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit'});
-}
+        // ── UI Helpers ────────────────────────────────────────────────
+        function showError(msg) {
+            const el = document.getElementById('errorMsg');
+            el.textContent = msg;
+            el.style.display = 'block';
+            document.getElementById('successMsg').style.display = 'none';
+        }
 
-// Close modal on Escape
-document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') closeAddModal();
-});
-</script>
-<script>
-const TOKEN_KEY = 'sb_access_token';
-const REFRESH_KEY = 'sb_refresh_token';
-function getToken() { return localStorage.getItem(TOKEN_KEY); }
-function getRefreshToken() { return localStorage.getItem(REFRESH_KEY); }
+        function showSuccess(msg) {
+            const el = document.getElementById('successMsg');
+            el.textContent = msg;
+            el.style.display = 'block';
+            document.getElementById('errorMsg').style.display = 'none';
+        }
 
-async function apiFetch(url, options = {}) {
-  if (!options.headers) options.headers = {};
-  options.headers['Content-Type'] = 'application/json';
-  const token = getToken();
-  if (token) options.headers['Authorization'] = 'Bearer ' + token;
-  let res = await fetch(url, options);
-  if (res.status === 401 && getRefreshToken()) {
-    const refreshed = await refreshAccessToken();
-    if (refreshed) {
-      options.headers['Authorization'] = 'Bearer ' + getToken();
-      res = await fetch(url, options);
-    }
-  }
-  return res;
-}
+        function clearMessages() {
+            document.getElementById('errorMsg').style.display = 'none';
+            document.getElementById('successMsg').style.display = 'none';
+        }
 
-async function refreshAccessToken() {
-  const refreshToken = getRefreshToken();
-  if (!refreshToken) return false;
-  try {
-    const res = await fetch('/api/auth/refresh', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({refresh_token: refreshToken}) });
-    const data = await res.json();
-    if (data.success) { localStorage.setItem(TOKEN_KEY, data.access_token); localStorage.setItem(REFRESH_KEY, data.refresh_token); return true; }
-  } catch (e) {}
-  localStorage.removeItem(TOKEN_KEY); localStorage.removeItem(REFRESH_KEY); return false;
-}
+        let isLoginMode = true;
+        function toggleMode() {
+            isLoginMode = !isLoginMode;
+            document.getElementById('loginForm').classList.toggle('hidden', !isLoginMode);
+            document.getElementById('registerForm').classList.toggle('hidden', isLoginMode);
+            document.getElementById('toggleBtn').textContent = isLoginMode ? 'New user? Register' : 'Already have an account? Sign In';
+            document.getElementById('toggleText').textContent = isLoginMode ? "Don't have an account?" : "Already have an account?";
+            document.getElementById('toggleLink').textContent = isLoginMode ? 'Register' : 'Sign In';
+            clearMessages();
+        }
 
-(async function checkAuth() {
-  const token = getToken();
-  if (!token) { window.location.href = '/login'; return; }
-  try { const res = await apiFetch('/api/auth/me'); if (!res.ok) window.location.href = '/login'; }
-  catch (e) { window.location.href = '/login'; }
-})();
+        // ── Login Handler ──────────────────────────────────────────────
+        document.getElementById('loginForm').onsubmit = async (e) => {
+            e.preventDefault();
+            clearMessages();
+            const btn = document.getElementById('loginBtn');
+            btn.disabled = true;
+            btn.textContent = 'Signing in...';
 
-async function addExchange(e) {
-  e.preventDefault();
-  const form = document.getElementById('addExchangeForm');
-  let alertBox = document.getElementById('exchangeAlert');
-  if (!alertBox) { alertBox = document.createElement('div'); alertBox.id = 'exchangeAlert'; alertBox.style.marginBottom = '15px'; form.insertBefore(alertBox, form.firstChild); }
+            try {
+                const username = document.getElementById('loginUsername').value.trim().toLowerCase();
+                const password = document.getElementById('loginPassword').value;
 
-  const nameEl = document.getElementById('exchangeName');
-  const apiKeyEl = document.getElementById('apiKey');
-  const apiSecretEl = document.getElementById('apiSecret');
-  const passphraseEl = document.getElementById('passphrase');
-  const isDemoEl = document.getElementById('isDemo');
-  const displayNameEl = document.getElementById('displayName');
+                const res = await fetch('/api/auth/login', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({username, password})
+                });
+                const data = await res.json();
 
-  const nameVal = nameEl && nameEl.value ? nameEl.value.toLowerCase() : '';
-  const displayNameVal = displayNameEl && displayNameEl.value ? displayNameEl.value.trim() : (nameVal || 'Exchange');
-  const apiKeyVal = apiKeyEl && apiKeyEl.value ? apiKeyEl.value.trim() : '';
-  const apiSecretVal = apiSecretEl && apiSecretEl.value ? apiSecretEl.value.trim() : '';
-  const passphraseVal = passphraseEl && passphraseEl.value ? passphraseEl.value.trim() : '';
-  const isDemoVal = isDemoEl ? isDemoEl.checked : true;
+                if (data.success) {
+                    setToken(data.access_token);
+                    setRefreshToken(data.refresh_token);
+                    // FIX: Set cookies for web navigation
+                    setCookie('access_token', data.access_token, 1);
+                    setCookie('refresh_token', data.refresh_token, 7);
+                    showSuccess('Login successful! Redirecting...');
+                    setTimeout(() => window.location.href = '/dashboard', 500);
+                } else {
+                    showError(data.error || 'Login failed');
+                }
+            } catch (err) {
+                showError('Network error. Please try again.');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Sign In';
+            }
+        };
 
-  const data = {
-    name: nameVal,
-    display_name: displayNameVal,
-    api_key: apiKeyVal,
-    api_secret: apiSecretVal,
-    passphrase: passphraseVal || null,
-    is_demo: isDemoVal
-  };
+        // ── Register Handler ───────────────────────────────────────────
+        document.getElementById('registerForm').onsubmit = async (e) => {
+            e.preventDefault();
+            clearMessages();
+            const btn = document.getElementById('regBtn');
+            btn.disabled = true;
+            btn.textContent = 'Creating account...';
 
-  if (!data.api_key || !data.api_secret) { 
-    alertBox.innerHTML = '<div style="background:rgba(255,85,119,0.15);color:#ff5577;border:1px solid rgba(255,85,119,0.3);padding:12px;border-radius:8px;">API Key and Secret are required</div>'; 
-    return false; 
-  }
+            try {
+                const username = document.getElementById('regUsername').value.trim().toLowerCase();
+                const password = document.getElementById('regPassword').value;
+                const password2 = document.getElementById('regPassword2').value;
 
-  try {
-    const resp = await apiFetch('/api/exchanges', { method: 'POST', body: JSON.stringify(data) });
-    if (resp.status === 401) {
-      alertBox.innerHTML = '<div style="background:rgba(255,85,119,0.15);color:#ff5577;border:1px solid rgba(255,85,119,0.3);padding:12px;border-radius:8px;">Session expired. Please <a href="/login">login again</a>.</div>'; 
-      return false;
-    }
-    const result = await resp.json();
-    if (result.success) { 
-      alertBox.innerHTML = '<div style="background:rgba(0,229,160,0.15);color:#00e5a0;border:1px solid rgba(0,229,160,0.3);padding:12px;border-radius:8px;">Exchange added!</div>'; 
-      setTimeout(() => { hideModal('addExchangeModal'); location.reload(); }, 1000); 
-    }
-    else { 
-      alertBox.innerHTML = '<div style="background:rgba(255,85,119,0.15);color:#ff5577;border:1px solid rgba(255,85,119,0.3);padding:12px;border-radius:8px;">' + (result.error || 'Failed: ' + JSON.stringify(result)) + '</div>'; 
-    }
-  } catch (err) { 
-    alertBox.innerHTML = '<div style="background:rgba(255,85,119,0.15);color:#ff5577;border:1px solid rgba(255,85,119,0.3);padding:12px;border-radius:8px;">Error: ' + err.message + '</div>'; 
-  }
-  return false;
-}
-</script>
-{% endblock %}
+                if (password !== password2) {
+                    showError('Passwords do not match');
+                    btn.disabled = false;
+                    btn.textContent = 'Create Account';
+                    return;
+                }
+                if (password.length < 6) {
+                    showError('Password must be at least 6 characters');
+                    btn.disabled = false;
+                    btn.textContent = 'Create Account';
+                    return;
+                }
+
+                const res = await fetch('/api/auth/register', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({username, password})
+                });
+                const data = await res.json();
+
+                if (data.success) {
+                    setToken(data.access_token);
+                    setRefreshToken(data.refresh_token);
+                    // FIX: Set cookies for web navigation
+                    setCookie('access_token', data.access_token, 1);
+                    setCookie('refresh_token', data.refresh_token, 7);
+                    showSuccess('Account created! Redirecting...');
+                    setTimeout(() => window.location.href = '/dashboard', 500);
+                } else {
+                    showError(data.error || 'Registration failed');
+                }
+            } catch (err) {
+                showError('Network error. Please try again.');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Create Account';
+            }
+        };
+
+        // ── Auto-redirect disabled to prevent redirect loops
+        // User must manually click login after token expires
+    </script>
+</body>
+</html>
