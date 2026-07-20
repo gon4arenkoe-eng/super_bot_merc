@@ -1488,7 +1488,62 @@ def reset_db_route():
 # ═══════════════════════════════════════════════════════════════════════
 # MAIN
 # ═══════════════════════════════════════════════════════════════════════
+# ============================================
+# TEMPORARY ADMIN ENDPOINT — удалить после использования
+# ============================================
+@app.route('/api/admin/cleanup-exchanges', methods=['POST'])
+@jwt_required()
+def admin_cleanup_exchanges():
+    """Remove duplicate exchanges for current user. Keep the first one."""
+    user_id = get_jwt_identity()
+    
+    exchanges = Exchange.query.filter_by(user_id=user_id).order_by(Exchange.id).all()
+    
+    if len(exchanges) <= 1:
+        return jsonify({
+            'status': 'ok',
+            'message': 'No duplicates found',
+            'total': len(exchanges)
+        })
+    
+    keep = exchanges[0]
+    to_delete = exchanges[1:]
+    deleted_ids = [ex.id for ex in to_delete]
+    
+    for ex in to_delete:
+        db.session.delete(ex)
+    
+    db.session.commit()
+    
+    return jsonify({
+        'status': 'cleaned',
+        'message': f'Kept exchange ID={keep.id}, deleted {len(to_delete)} duplicates',
+        'kept': {'id': keep.id, 'name': keep.name, 'type': keep.exchange_type},
+        'deleted_ids': deleted_ids
+    })
 
+
+@app.route('/api/admin/list-exchanges', methods=['GET'])
+@jwt_required()
+def admin_list_exchanges():
+    """List all exchanges for current user (debug)"""
+    user_id = get_jwt_identity()
+    exchanges = Exchange.query.filter_by(user_id=user_id).all()
+    
+    return jsonify({
+        'count': len(exchanges),
+        'exchanges': [
+            {
+                'id': ex.id,
+                'name': ex.name,
+                'type': ex.exchange_type,
+                'demo': ex.is_demo,
+                'active': ex.is_active,
+                'created_at': ex.created_at.isoformat() if hasattr(ex, 'created_at') else None
+            }
+            for ex in exchanges
+        ]
+    })
 if __name__ == '__main__':
     with app.app_context():
         db.create_all()
