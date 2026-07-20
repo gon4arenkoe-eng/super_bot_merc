@@ -281,10 +281,13 @@ async function apiFetch(url, options = {}) {
   options.headers['Content-Type'] = 'application/json';
   const token = getToken();
   if (token) options.headers['Authorization'] = 'Bearer ' + token;
-  const res = await fetch(url, options);
+  let res = await fetch(url, options);
   if (res.status === 401 && getRefreshToken()) {
     const refreshed = await refreshAccessToken();
-    if (refreshed) { options.headers['Authorization'] = 'Bearer ' + getToken(); return fetch(url, options); }
+    if (refreshed) {
+      options.headers['Authorization'] = 'Bearer ' + getToken();
+      res = await fetch(url, options);
+    }
   }
   return res;
 }
@@ -320,7 +323,6 @@ async function addExchange(e) {
   const isDemoEl = document.getElementById('isDemo');
   const displayNameEl = document.getElementById('displayName');
 
-  // FIX: Handle null elements safely
   const nameVal = nameEl && nameEl.value ? nameEl.value.toLowerCase() : '';
   const displayNameVal = displayNameEl && displayNameEl.value ? displayNameEl.value.trim() : (nameVal || 'Exchange');
   const apiKeyVal = apiKeyEl && apiKeyEl.value ? apiKeyEl.value.trim() : '';
@@ -344,16 +346,20 @@ async function addExchange(e) {
 
   try {
     const resp = await apiFetch('/api/exchanges', { method: 'POST', body: JSON.stringify(data) });
+    if (resp.status === 401) {
+      alertBox.innerHTML = '<div style="background:rgba(255,85,119,0.15);color:#ff5577;border:1px solid rgba(255,85,119,0.3);padding:12px;border-radius:8px;">Session expired. Please <a href="/login">login again</a>.</div>'; 
+      return false;
+    }
     const result = await resp.json();
     if (result.success) { 
       alertBox.innerHTML = '<div style="background:rgba(0,229,160,0.15);color:#00e5a0;border:1px solid rgba(0,229,160,0.3);padding:12px;border-radius:8px;">Exchange added!</div>'; 
       setTimeout(() => { hideModal('addExchangeModal'); location.reload(); }, 1000); 
     }
     else { 
-      alertBox.innerHTML = '<div style="background:rgba(255,85,119,0.15);color:#ff5577;border:1px solid rgba(255,85,119,0.3);padding:12px;border-radius:8px;">' + (result.error || 'Failed') + '</div>'; 
+      alertBox.innerHTML = '<div style="background:rgba(255,85,119,0.15);color:#ff5577;border:1px solid rgba(255,85,119,0.3);padding:12px;border-radius:8px;">' + (result.error || 'Failed: ' + JSON.stringify(result)) + '</div>'; 
     }
   } catch (err) { 
-    alertBox.innerHTML = '<div style="background:rgba(255,85,119,0.15);color:#ff5577;border:1px solid rgba(255,85,119,0.3);padding:12px;border-radius:8px;">Network error: ' + err.message + '</div>'; 
+    alertBox.innerHTML = '<div style="background:rgba(255,85,119,0.15);color:#ff5577;border:1px solid rgba(255,85,119,0.3);padding:12px;border-radius:8px;">Error: ' + err.message + '</div>'; 
   }
   return false;
 }
