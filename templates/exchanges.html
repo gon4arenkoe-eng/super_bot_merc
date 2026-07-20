@@ -305,9 +305,21 @@ async function refreshAccessToken() {
 
 (async function checkAuth() {
   const token = getToken();
-  if (!token) { window.location.href = '/login'; return; }
-  try { const res = await apiFetch('/api/auth/me'); if (!res.ok) window.location.href = '/login'; }
-  catch (e) { window.location.href = '/login'; }
+  if (!token) { 
+    console.warn('No JWT token found'); 
+    // Don't redirect - let user see the page, API calls will fail with 401
+    return; 
+  }
+  try { 
+    const res = await apiFetch('/api/auth/me'); 
+    if (!res.ok) {
+      console.warn('JWT token invalid or expired');
+      // Clear invalid tokens
+      localStorage.removeItem(TOKEN_KEY);
+      localStorage.removeItem(REFRESH_KEY);
+    }
+  }
+  catch (e) { console.error('Auth check error:', e); }
 })();
 
 async function addExchange(e) {
