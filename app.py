@@ -3,6 +3,7 @@
 SUPERBOT v5.6.0 Mercedes Full - JWT Auth Edition
 Multi-user JWT auth, idempotent orders, auto-reset daily PnL
 Fixed: close_position with exact size, klines all exchanges, type safety
+Duplicate exchange prevention added
 """
 
 import os
@@ -709,13 +710,14 @@ class ExchangeManager:
         if name not in app.config['SUPPORTED_EXCHANGES']:
             raise ValueError(f"Unsupported exchange: {name}. Supported: {', '.join(app.config['SUPPORTED_EXCHANGES'])}")
 
-        encrypted_key = encrypt_value(api_key)
+        # FIX: Prevent duplicate exchanges for the same user
         existing = Exchange.query.filter_by(
-            user_id=user_id, name=name, api_key_encrypted=encrypted_key
+            user_id=user_id, name=name
         ).first()
         if existing:
-            raise ValueError(f"Exchange {name.upper()} with this API key already exists (ID: {existing.id})")
+            raise ValueError(f"Exchange {name.upper()} already exists for this user (ID: {existing.id}). Use update to change API keys.")
 
+        encrypted_key = encrypt_value(api_key)
         ex = Exchange(
             user_id=user_id,
             name=name,
@@ -1488,66 +1490,6 @@ def reset_db_route():
 # ═══════════════════════════════════════════════════════════════════════
 # MAIN
 # ═══════════════════════════════════════════════════════════════════════
-# ============================================
-# TEMPORARY ADMIN ENDPOINTS — удалить после использования
-# ============================================
-
-@app.route('/api/admin/cleanup-exchanges', methods=['POST'])
-@page_auth_required
-def admin_cleanup_exchanges():
-    """Remove duplicate exchanges for current user. Keep the first one."""
-    user = request.current_user
-    user_id = user.id
-    
-    exchanges = Exchange.query.filter_by(user_id=user_id).order_by(Exchange.id).all()
-    
-    if len(exchanges) <= 1:
-        return jsonify({
-            'status': 'ok',
-            'message': 'No duplicates found',
-            'total': len(exchanges)
-        })
-    
-    keep = exchanges[0]
-    to_delete = exchanges[1:]
-    deleted_ids = [ex.id for ex in to_delete]
-    
-    for ex in to_delete:
-        db.session.delete(ex)
-    
-    db.session.commit()
-    
-    return jsonify({
-        'status': 'cleaned',
-        'message': f'Kept exchange ID={keep.id}, deleted {len(to_delete)} duplicates',
-        'kept': {'id': keep.id, 'name': keep.name, 'type': keep.name},
-        'deleted_ids': deleted_ids
-    })
-
-
-@app.route('/api/admin/list-exchanges', methods=['GET'])
-@page_auth_required
-def admin_list_exchanges():
-    """List all exchanges for current user (debug)"""
-    user = request.current_user
-    user_id = user.id
-    exchanges = Exchange.query.filter_by(user_id=user_id).all()
-    
-    return jsonify({
-        'count': len(exchanges),
-        'exchanges': [
-            {
-                'id': ex.id,
-                'name': ex.name,
-                'type': ex.name,
-                'demo': ex.is_demo,
-                'active': ex.is_active,
-                'created_at': ex.created_at.isoformat() if hasattr(ex, 'created_at') and ex.created_at else None
-            }
-            for ex in exchanges
-        ]
-    })
-
 
 if __name__ == '__main__':
     with app.app_context():
