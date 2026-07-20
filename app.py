@@ -25,13 +25,10 @@ from functools import wraps
 
 from flask import Flask, request, jsonify, render_template, redirect, url_for, make_response
 from flask_sqlalchemy import SQLAlchemy
-from flask_socketio import SocketIO, emit, join_room, leave_room
 from werkzeug.security import generate_password_hash, check_password_hash
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
-import threading
-import time
 
 # ── Import pure functions from core/parsers ─────────────────────────────
 from core.parsers import parse_balance, parse_all_positions, parse_klines
@@ -92,9 +89,6 @@ else:
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
-
-# SocketIO for real-time updates
-socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
 
 # CORS
 @app.after_request
@@ -1102,74 +1096,6 @@ sentiment_analyzer = SentimentAnalyzer()
 
 
 # ═══════════════════════════════════════════════════════════════════════
-# WEBSOCKET EVENTS
-# ═══════════════════════════════════════════════════════════════════════
-
-@socketio.on('connect')
-def handle_connect():
-    """Client connected — authenticate via JWT."""
-    token = request.args.get('token') or request.cookies.get('access_token')
-    if not token:
-        return False  # Reject connection
-
-    payload = decode_token(token, 'access')
-    if 'error' in payload:
-        return False
-
-    user = User.query.get(payload.get('user_id'))
-    if not user:
-        return False
-
-    join_room(f'user_{user.id}')
-    logger.info(f"WebSocket: user {user.id} connected")
-    emit('connected', {'status': 'ok', 'user_id': user.id})
-
-
-@socketio.on('disconnect')
-def handle_disconnect():
-    """Client disconnected."""
-    logger.info("WebSocket: client disconnected")
-
-
-@socketio.on('subscribe_exchange')
-def handle_subscribe_exchange(data):
-    """Client wants live updates for specific exchange."""
-    exchange_id = data.get('exchange_id')
-    user_id = data.get('user_id')
-    if exchange_id and user_id:
-        join_room(f'exchange_{exchange_id}_user_{user_id}')
-        emit('subscribed', {'exchange_id': exchange_id})
-
-
-# ═══════════════════════════════════════════════════════════════════════
-# BACKGROUND TASK: Stream live data to clients
-# ═══════════════════════════════════════════════════════════════════════
-
-def broadcast_positions(user_id, exchange_id, positions):
-    """Broadcast positions update to specific user."""
-    socketio.emit('positions_update', {
-        'exchange_id': exchange_id,
-        'positions': positions
-    }, room=f'user_{user_id}')
-
-
-def broadcast_balance(user_id, exchange_id, balance):
-    """Broadcast balance update."""
-    socketio.emit('balance_update', {
-        'exchange_id': exchange_id,
-        'balance': balance
-    }, room=f'user_{user_id}')
-
-
-def broadcast_pnl(user_id, exchange_id, pnl):
-    """Broadcast PnL update."""
-    socketio.emit('pnl_update', {
-        'exchange_id': exchange_id,
-        'pnl': pnl
-    }, room=f'user_{user_id}')
-
-
-# ═══════════════════════════════════════════════════════════════════════
 # ROUTES: PAGES (JWT-protected via cookie)
 # ═══════════════════════════════════════════════════════════════════════
 
@@ -1570,4 +1496,4 @@ if __name__ == '__main__':
         db.create_all()
         logger.info("Database tables created")
     port = int(os.environ.get('PORT', 5000))
-    socketio.run(app, host='0.0.0.0', port=port, debug=False)
+    app.run(host='0.0.0.0', port=port, debug=False)
