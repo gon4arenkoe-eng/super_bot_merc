@@ -17,7 +17,6 @@ import threading
 import uuid
 import jwt
 import requests
-import numpy as np
 from datetime import datetime, timezone, timedelta
 from decimal import Decimal
 from urllib.parse import urlencode
@@ -51,13 +50,22 @@ logger = logging.getLogger('SUPERBOT')
 
 # ── Flask App ──────────────────────────────────────────────────────────
 app = Flask(__name__)
-app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'superbot-secret-key-change-me')
+# Security: MUST be set in environment variables
+SECRET_KEY = os.environ.get('SECRET_KEY')
+if not SECRET_KEY:
+    raise RuntimeError(
+        "FATAL: SECRET_KEY environment variable is not set! "
+        "Set it in Render Dashboard → Environment Variables. "
+        "Generate with: python -c \"import secrets; print(secrets.token_hex(32))\""
+    )
+
+app.config['SECRET_KEY'] = SECRET_KEY
 app.config['VERSION'] = '5.6.0'
 app.config['EDITION'] = 'Mercedes'
 app.config['SUPPORTED_EXCHANGES'] = ['bingx', 'binance', 'bybit', 'okx']
 
 # JWT Config
-JWT_SECRET = os.environ.get('JWT_SECRET', app.config['SECRET_KEY'])
+JWT_SECRET = os.environ.get('JWT_SECRET', SECRET_KEY)
 JWT_ACCESS_EXPIRE = int(os.environ.get('JWT_ACCESS_EXPIRE_MINUTES', '60'))
 JWT_REFRESH_EXPIRE = int(os.environ.get('JWT_REFRESH_EXPIRE_DAYS', '7'))
 
@@ -78,7 +86,11 @@ db = SQLAlchemy(app)
 # CORS
 @app.after_request
 def after_request(response):
-    response.headers.add('Access-Control-Allow-Origin', '*')
+    # Allow specific origins - update with your actual domain
+    allowed_origins = os.environ.get('ALLOWED_ORIGINS', 'https://super-bot-merc.onrender.com').split(',')
+    origin = request.headers.get('Origin', '')
+    if origin in allowed_origins or '*' in allowed_origins:
+        response.headers.add('Access-Control-Allow-Origin', origin or allowed_origins[0])
     response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
     response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
     return response
@@ -1149,6 +1161,16 @@ def api_register():
     data = request.get_json() or {}
     username = data.get('username', '').strip().lower()
     password = data.get('password', '')
+    invite_code = data.get('invite_code', '')
+
+    # Check if any users already exist - if yes, require invite code
+    existing_user_count = User.query.count()
+    if existing_user_count > 0:
+        # For additional users, require invite code (set in env)
+        required_code = os.environ.get('INVITE_CODE')
+        if required_code and invite_code != required_code:
+            logger.warning(f"Registration attempt with invalid invite code: {username}")
+            return jsonify({'success': False, 'error': 'Invalid or missing invite code'}), 403
 
     if not username or not password:
         return jsonify({'success': False, 'error': 'Username and password required'}), 400
@@ -1398,10 +1420,20 @@ def health():
 # ═══════════════════════════════════════════════════════════════════════
 
 @app.route('/init-db')
+@jwt_optional
 def init_db_route():
-    """Initialize database tables via HTTP call"""
+    """Initialize database tables via HTTP call. Requires auth if users exist."""
     with app.app_context():
         try:
+            # If users already exist, require auth
+            user_count = User.query.count()
+            if user_count > 0:
+                user = get_auth_user()
+                if not user:
+                    return jsonify({'success': False, 'error': 'Authentication required. Database already initialized.'}), 401
+                if user.id != 1:
+                    return jsonify({'success': False, 'error': 'Admin access required'}), 403
+
             db.create_all()
             logger.info("Database initialized via /init-db")
             return jsonify({
@@ -1414,12 +1446,19 @@ def init_db_route():
             return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/reset-db')
+@jwt_required
 def reset_db_route():
-    """DROP ALL tables and recreate them. WARNING: DESTROYS ALL DATA!"""
+    """DROP ALL tables and recreate them. WARNING: DESTROYS ALL DATA! Admin only."""
+    user = request.current_user
+    # Only first registered user (ID=1) or explicit admin can reset
+    if user.id != 1:
+        logger.warning(f"Unauthorized /reset-db attempt by user {user.id} ({user.username})")
+        return jsonify({'success': False, 'error': 'Admin access required'}), 403
+
     with app.app_context():
         try:
             db.drop_all()
-            logger.warning("Database DROP ALL executed via /reset-db")
+            logger.warning(f"Database DROP ALL executed by admin {user.username} via /reset-db")
             db.create_all()
             logger.info("Database recreated via /reset-db")
             return jsonify({
