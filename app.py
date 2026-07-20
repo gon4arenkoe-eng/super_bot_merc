@@ -155,23 +155,15 @@ def decode_token(token: str, token_type: str = 'access') -> dict:
 
 
 def get_auth_user() -> 'User':
-    """Get current user from Authorization header OR cookie."""
-    # 1. Try Bearer token from Authorization header (API requests)
+    """Get current user from Authorization header."""
     auth_header = request.headers.get('Authorization', '')
-    if auth_header.startswith('Bearer '):
-        token = auth_header[7:]
-        payload = decode_token(token, 'access')
-        if 'error' not in payload:
-            return User.query.get(payload.get('user_id'))
-
-    # 2. Fallback: try cookie (for browser page requests)
-    token = request.cookies.get('access_token')
-    if token:
-        payload = decode_token(token, 'access')
-        if 'error' not in payload:
-            return User.query.get(payload.get('user_id'))
-
-    return None
+    if not auth_header.startswith('Bearer '):
+        return None
+    token = auth_header[7:]
+    payload = decode_token(token, 'access')
+    if 'error' in payload:
+        return None
+    return User.query.get(payload.get('user_id'))
 
 
 def jwt_required(f):
@@ -761,6 +753,20 @@ class ExchangeManager:
         ex = db.session.get(Exchange, exchange_id)
         if not ex or ex.user_id != user_id:
             return None
+
+        # STRICT MODE: Only one exchange can be active at a time
+        # If turning ON this exchange, deactivate all others first
+        if not ex.is_active:
+            # Deactivate all other exchanges for this user
+            other_active = Exchange.query.filter(
+                Exchange.user_id == user_id,
+                Exchange.id != exchange_id,
+                Exchange.is_active == True
+            ).all()
+            for other in other_active:
+                other.is_active = False
+                logger.info(f"Auto-deactivated exchange {other.id} ({other.name}) because exchange {exchange_id} is being activated")
+
         ex.is_active = not ex.is_active
         db.session.commit()
         return ex.to_dict()
