@@ -50,14 +50,20 @@ logger = logging.getLogger('SUPERBOT')
 
 # ── Flask App ──────────────────────────────────────────────────────────
 app = Flask(__name__)
-# Security: MUST be set in environment variables
+# Security: SECRET_KEY must be set in production
+# For CI/testing, auto-generate a temporary key (DO NOT use in production!)
 SECRET_KEY = os.environ.get('SECRET_KEY')
 if not SECRET_KEY:
-    raise RuntimeError(
-        "FATAL: SECRET_KEY environment variable is not set! "
-        "Set it in Render Dashboard → Environment Variables. "
-        "Generate with: python -c \"import secrets; print(secrets.token_hex(32))\""
-    )
+    if os.environ.get('RENDER') or os.environ.get('PRODUCTION'):
+        raise RuntimeError(
+            "FATAL: SECRET_KEY environment variable is not set! "
+            "Set it in Render Dashboard → Environment Variables. "
+            "Generate with: python -c \"import secrets; print(secrets.token_hex(32))\""
+        )
+    # CI/development fallback - generate temporary key
+    import secrets
+    SECRET_KEY = secrets.token_hex(32)
+    logger.warning("WARNING: Using auto-generated SECRET_KEY. Set SECRET_KEY in production!")
 
 app.config['SECRET_KEY'] = SECRET_KEY
 app.config['VERSION'] = '5.6.0'
@@ -1251,14 +1257,22 @@ def get_exchanges():
 def add_exchange():
     data = request.get_json() or {}
     try:
+        # FIX: handle None values safely
+        api_key = (data.get('api_key') or '').strip()
+        api_secret = (data.get('api_secret') or '').strip()
+        passphrase = (data.get('passphrase') or '').strip() or None
+        name = (data.get('name') or '').strip().lower()
+        display_name = (data.get('display_name') or name.upper() or 'Exchange').strip()
+        is_demo = data.get('is_demo', True)
+
         ex = ExchangeManager.add_exchange(
             user_id=request.current_user.id,
-            name=data.get('name'),
-            display_name=data.get('display_name', data.get('name', '').upper()),
-            api_key=data.get('api_key', '').strip(),
-            api_secret=data.get('api_secret', '').strip(),
-            passphrase=data.get('passphrase', '').strip() or None,
-            is_demo=data.get('is_demo', True)
+            name=name,
+            display_name=display_name,
+            api_key=api_key,
+            api_secret=api_secret,
+            passphrase=passphrase,
+            is_demo=is_demo
         )
         return jsonify({'success': True, 'id': ex.id})
     except ValueError as e:
