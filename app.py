@@ -1492,10 +1492,11 @@ def reset_db_route():
 # TEMPORARY ADMIN ENDPOINT — удалить после использования
 # ============================================
 @app.route('/api/admin/cleanup-exchanges', methods=['POST'])
-@jwt_required()
+@jwt_required
 def admin_cleanup_exchanges():
     """Remove duplicate exchanges for current user. Keep the first one."""
-    user_id = get_jwt_identity()
+    user = request.current_user
+    user_id = user.id
     
     exchanges = Exchange.query.filter_by(user_id=user_id).order_by(Exchange.id).all()
     
@@ -1518,16 +1519,17 @@ def admin_cleanup_exchanges():
     return jsonify({
         'status': 'cleaned',
         'message': f'Kept exchange ID={keep.id}, deleted {len(to_delete)} duplicates',
-        'kept': {'id': keep.id, 'name': keep.name, 'type': keep.exchange_type},
+        'kept': {'id': keep.id, 'name': keep.name, 'type': keep.name},
         'deleted_ids': deleted_ids
     })
 
 
 @app.route('/api/admin/list-exchanges', methods=['GET'])
-@jwt_required()
+@jwt_required
 def admin_list_exchanges():
     """List all exchanges for current user (debug)"""
-    user_id = get_jwt_identity()
+    user = request.current_user
+    user_id = user.id
     exchanges = Exchange.query.filter_by(user_id=user_id).all()
     
     return jsonify({
@@ -1536,10 +1538,10 @@ def admin_list_exchanges():
             {
                 'id': ex.id,
                 'name': ex.name,
-                'type': ex.exchange_type,
+                'type': ex.name,
                 'demo': ex.is_demo,
                 'active': ex.is_active,
-                'created_at': ex.created_at.isoformat() if hasattr(ex, 'created_at') else None
+                'created_at': ex.created_at.isoformat() if hasattr(ex, 'created_at') and ex.created_at else None
             }
             for ex in exchanges
         ]
