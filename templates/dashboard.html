@@ -143,115 +143,6 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background:#060b14; color
 .demo-badge { display:inline-block; padding:2px 8px; border-radius:4px; font-size:10px; font-weight:600; background:rgba(0,229,160,0.15); color:#00e5a0; }
 .demo-badge.real { background:rgba(255,85,119,0.15); color:#ff5577; }
 
-/* Exchange Selector */
-.exchange-selector {
-    position: relative;
-    margin-left: 20px;
-}
-.exchange-selector-trigger {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 8px 14px;
-    background: #131d33;
-    border: 1px solid #1a2a40;
-    border-radius: 10px;
-    cursor: pointer;
-    transition: all 0.2s;
-    min-width: 160px;
-}
-.exchange-selector-trigger:hover {
-    border-color: #00d4ff;
-    background: rgba(0,212,255,0.05);
-}
-.exchange-selector-trigger.active {
-    border-color: #00d4ff;
-}
-.exchange-dot {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background: #6a809a;
-    flex-shrink: 0;
-}
-.exchange-dot.active {
-    background: #00e5a0;
-    box-shadow: 0 0 8px rgba(0,229,160,0.4);
-}
-.exchange-name {
-    font-size: 14px;
-    font-weight: 600;
-    color: #e0e8f0;
-}
-.exchange-mode {
-    font-size: 10px;
-    font-weight: 700;
-    padding: 2px 6px;
-    border-radius: 4px;
-    background: rgba(0,229,160,0.15);
-    color: #00e5a0;
-}
-.exchange-mode.real {
-    background: rgba(255,85,119,0.15);
-    color: #ff5577;
-}
-.exchange-dropdown {
-    display: none;
-    position: absolute;
-    top: calc(100% + 8px);
-    left: 0;
-    width: 220px;
-    background: #131d33;
-    border: 1px solid #1a2a40;
-    border-radius: 12px;
-    padding: 8px;
-    z-index: 1000;
-    box-shadow: 0 10px 40px rgba(0,0,0,0.4);
-}
-.exchange-dropdown.show {
-    display: block;
-}
-.exchange-dropdown-item {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 10px 12px;
-    border-radius: 8px;
-    cursor: pointer;
-    transition: all 0.2s;
-}
-.exchange-dropdown-item:hover {
-    background: rgba(0,212,255,0.08);
-}
-.exchange-dropdown-item.selected {
-    background: rgba(0,212,255,0.12);
-    border: 1px solid rgba(0,212,255,0.3);
-}
-.exchange-dropdown-item .item-name {
-    font-size: 13px;
-    font-weight: 600;
-    color: #e0e8f0;
-    flex: 1;
-}
-.exchange-dropdown-item .item-mode {
-    font-size: 10px;
-    font-weight: 700;
-    padding: 2px 6px;
-    border-radius: 4px;
-}
-.exchange-dropdown-item .item-mode.demo {
-    background: rgba(0,229,160,0.15);
-    color: #00e5a0;
-}
-.exchange-dropdown-item .item-mode.real {
-    background: rgba(255,85,119,0.15);
-    color: #ff5577;
-}
-.exchange-dropdown-item .item-status {
-    font-size: 10px;
-    color: #6a809a;
-}
-
 /* Scrollbar */
 ::-webkit-scrollbar { width:6px; }
 ::-webkit-scrollbar-track { background:#0a0f1a; }
@@ -279,19 +170,6 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background:#060b14; color
       </div>
     </div>
     <div class="topbar-center">
-      <!-- Exchange Selector -->
-      <div class="exchange-selector" id="exchangeSelector">
-        <div class="exchange-selector-trigger" onclick="toggleExchangeDropdown()">
-          <span class="exchange-dot active" id="selectorDot"></span>
-          <span class="exchange-name" id="selectorName">Loading...</span>
-          <span class="exchange-mode" id="selectorMode">DEMO</span>
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:#6a809a;margin-left:auto;">
-            <polyline points="6 9 12 15 18 9"/>
-          </svg>
-        </div>
-        <div class="exchange-dropdown" id="exchangeDropdown"></div>
-      </div>
-
       <div class="stat-pill">
         <span class="lbl">Balance</span>
         <span class="val" id="topBalance">$0.00</span>
@@ -331,10 +209,6 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background:#060b14; color
     <a href="#" class="nav-item" onclick="alert('Coming soon')">
       <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="1.5" fill="none"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
       History
-    </a>
-    <a href="/exchanges" class="nav-item">
-      <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="1.5" fill="none"><path d="M13 2L4 14h7l-2 8 9-12h-7l2-8z"/></svg>
-      Manage Exchanges
     </a>
     <a href="#" class="nav-item" onclick="alert('Coming soon')">
       <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="1.5" fill="none"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>
@@ -544,31 +418,6 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background:#060b14; color
         </div>
       </div>
 
-      <!-- EXCHANGES -->
-      <div class="rail-card">
-        <h4>
-          <svg width="16" height="16" viewBox="0 0 24 24" stroke="#00d4ff" stroke-width="1.5" fill="none"><path d="M13 2L4 14h7l-2 8 9-12h-7l2-8z"/></svg>
-          Exchanges ({{ active_count }}/{{ exchanges|length }})
-        </h4>
-        <div id="exchangesList" style="max-height:200px; overflow-y:auto;">
-          {% for ex in exchanges %}
-          <div class="status-row">
-            <span class="lbl">
-              <span class="exchange-tag {{ ex.name }}">{{ ex.name|upper }}</span>
-              {{ ex.display_name }}
-            </span>
-            <span class="val {% if ex.is_active %}pos{% else %}neg{% endif %}">{{ "ON" if ex.is_active else "OFF" }}</span>
-          </div>
-          {% else %}
-          <div style="color:#6a809a; font-size:12px; text-align:center; padding:10px;">No exchanges added</div>
-          {% endfor %}
-        </div>
-        <a href="/exchanges" class="nexus-btn nexus-btn-primary" style="width:100%; margin-top:10px; text-decoration:none;">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 5v14M5 12h14"/></svg>
-          Manage Exchanges
-        </a>
-      </div>
-
       <!-- QUICK ACTIONS -->
       <div class="rail-card">
         <h4>
@@ -632,102 +481,6 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background:#060b14; color
 </div>
 
 <script>
-// ═══════════════════════════════════════════════════════════════════════
-// EXCHANGE SELECTOR
-// ═══════════════════════════════════════════════════════════════════════
-let currentExchangeId = null;
-let exchangesList = [];
-
-async function loadExchangeSelector() {
-    try {
-        const res = await apiFetch('/api/exchanges');
-        const data = await res.json();
-        if (!data.success) return;
-
-        exchangesList = data.data || [];
-
-        // Try to restore from localStorage
-        const savedId = localStorage.getItem('selected_exchange_id');
-        if (savedId) {
-            const ex = exchangesList.find(e => e.id == savedId);
-            if (ex) {
-                selectExchange(ex.id);
-                return;
-            }
-        }
-
-        // Default to first active exchange
-        const active = exchangesList.find(e => e.is_active);
-        if (active) {
-            selectExchange(active.id);
-        } else if (exchangesList.length > 0) {
-            selectExchange(exchangesList[0].id);
-        }
-    } catch (e) {
-        console.error('Load exchange selector error:', e);
-    }
-}
-
-function selectExchange(exchangeId) {
-    currentExchangeId = exchangeId;
-    localStorage.setItem('selected_exchange_id', exchangeId);
-
-    const ex = exchangesList.find(e => e.id == exchangeId);
-    if (!ex) return;
-
-    // Update selector display
-    const dot = document.getElementById('selectorDot');
-    const name = document.getElementById('selectorName');
-    const mode = document.getElementById('selectorMode');
-
-    name.textContent = ex.display_name || ex.name.toUpperCase();
-    mode.textContent = ex.is_demo ? 'DEMO' : 'REAL';
-    mode.className = 'exchange-mode ' + (ex.is_demo ? '' : 'real');
-    dot.className = 'exchange-dot ' + (ex.is_active ? 'active' : '');
-
-    // Close dropdown
-    document.getElementById('exchangeDropdown').classList.remove('show');
-
-    // Reload data for selected exchange
-    loadData();
-}
-
-function toggleExchangeDropdown() {
-    const dropdown = document.getElementById('exchangeDropdown');
-    dropdown.classList.toggle('show');
-
-    if (dropdown.classList.contains('show')) {
-        renderExchangeDropdown();
-    }
-}
-
-function renderExchangeDropdown() {
-    const container = document.getElementById('exchangeDropdown');
-    if (!exchangesList.length) {
-        container.innerHTML = '<div style="padding:12px;color:#6a809a;font-size:12px;">No exchanges</div>';
-        return;
-    }
-
-    container.innerHTML = exchangesList.map(ex => `
-        <div class="exchange-dropdown-item ${ex.id == currentExchangeId ? 'selected' : ''}" 
-             onclick="selectExchange(${ex.id})">
-            <span class="exchange-dot ${ex.is_active ? 'active' : ''}"></span>
-            <span class="item-name">${ex.display_name || ex.name.toUpperCase()}</span>
-            <span class="item-mode ${ex.is_demo ? 'demo' : 'real'}">${ex.is_demo ? 'DEMO' : 'REAL'}</span>
-            <span class="item-status">${ex.is_active ? 'ON' : 'OFF'}</span>
-        </div>
-    `).join('');
-}
-
-// Close dropdown when clicking outside
-document.addEventListener('click', function(e) {
-    const selector = document.getElementById('exchangeSelector');
-    if (selector && !selector.contains(e.target)) {
-        const dropdown = document.getElementById('exchangeDropdown');
-        if (dropdown) dropdown.classList.remove('show');
-    }
-});
-
 // Clock
 function updateClock() {
   const now = new Date();
@@ -769,15 +522,10 @@ async function apiFetch(url, options = {}) {
 
 // Load data
 async function loadData() {
-  if (!currentExchangeId) {
-    await loadExchangeSelector();
-    return;
-  }
-
   try {
     const [balanceRes, positionsRes, botRes] = await Promise.all([
-      apiFetch('/api/balance?exchange_id=' + currentExchangeId),
-      apiFetch('/api/positions/live?exchange_id=' + currentExchangeId),
+      apiFetch('/api/balance'),
+      apiFetch('/api/positions/live'),
       apiFetch('/api/bot/status')
     ]);
 
@@ -785,15 +533,11 @@ async function loadData() {
     const positions = await positionsRes.json();
     const botStatus = await botRes.json();
 
-    // Update stats (single exchange)
-    if (balance.success) {
-      document.getElementById('topBalance').textContent = '$' + (balance.balance || 0).toLocaleString('en-US', {minimumFractionDigits: 2});
-      document.getElementById('statBalance').textContent = '$' + (balance.balance || 0).toLocaleString('en-US', {minimumFractionDigits: 0});
-    }
-
-    const posCount = positions.data?.length || 0;
-    document.getElementById('topOpen').textContent = posCount + ' / 10';
-    document.getElementById('statOpen').innerHTML = posCount + ' <span style="font-size:14px;color:#6a809a;">/ 10</span>';
+    // Update stats
+    document.getElementById('topBalance').textContent = '$' + (balance.total || 0).toLocaleString('en-US', {minimumFractionDigits: 2});
+    document.getElementById('statBalance').textContent = '$' + (balance.total || 0).toLocaleString('en-US', {minimumFractionDigits: 0});
+    document.getElementById('topOpen').textContent = positions.length + ' / 10';
+    document.getElementById('statOpen').innerHTML = positions.length + ' <span style="font-size:14px;color:#6a809a;">/ 10</span>';
 
     // Update bot status
     if (botStatus.running) {
@@ -807,7 +551,7 @@ async function loadData() {
     }
 
     // Update positions table
-    updatePositionsTable(positions.data || []);
+    updatePositionsTable(positions);
 
   } catch (e) {
     console.error('Load data error:', e);
