@@ -1489,10 +1489,11 @@ def reset_db_route():
 # MAIN
 # ═══════════════════════════════════════════════════════════════════════
 # ============================================
-# TEMPORARY ADMIN ENDPOINT — удалить после использования
+# TEMPORARY ADMIN ENDPOINTS — удалить после использования
 # ============================================
+
 @app.route('/api/admin/cleanup-exchanges', methods=['POST'])
-@jwt_required
+@page_auth_required
 def admin_cleanup_exchanges():
     """Remove duplicate exchanges for current user. Keep the first one."""
     user = request.current_user
@@ -1525,7 +1526,7 @@ def admin_cleanup_exchanges():
 
 
 @app.route('/api/admin/list-exchanges', methods=['GET'])
-@jwt_required
+@page_auth_required
 def admin_list_exchanges():
     """List all exchanges for current user (debug)"""
     user = request.current_user
@@ -1546,6 +1547,8 @@ def admin_list_exchanges():
             for ex in exchanges
         ]
     })
+
+
 if __name__ == '__main__':
     with app.app_context():
         db.create_all()
