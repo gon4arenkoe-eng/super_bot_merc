@@ -155,15 +155,23 @@ def decode_token(token: str, token_type: str = 'access') -> dict:
 
 
 def get_auth_user() -> 'User':
-    """Get current user from Authorization header."""
+    """Get current user from Authorization header OR cookie."""
+    # 1. Try Bearer token from Authorization header (API requests)
     auth_header = request.headers.get('Authorization', '')
-    if not auth_header.startswith('Bearer '):
-        return None
-    token = auth_header[7:]
-    payload = decode_token(token, 'access')
-    if 'error' in payload:
-        return None
-    return User.query.get(payload.get('user_id'))
+    if auth_header.startswith('Bearer '):
+        token = auth_header[7:]
+        payload = decode_token(token, 'access')
+        if 'error' not in payload:
+            return User.query.get(payload.get('user_id'))
+
+    # 2. Fallback: try cookie (for browser page requests)
+    token = request.cookies.get('access_token')
+    if token:
+        payload = decode_token(token, 'access')
+        if 'error' not in payload:
+            return User.query.get(payload.get('user_id'))
+
+    return None
 
 
 def jwt_required(f):
