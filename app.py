@@ -753,20 +753,6 @@ class ExchangeManager:
         ex = db.session.get(Exchange, exchange_id)
         if not ex or ex.user_id != user_id:
             return None
-
-        # STRICT MODE: Only one exchange can be active at a time
-        # If turning ON this exchange, deactivate all others first
-        if not ex.is_active:
-            # Deactivate all other exchanges for this user
-            other_active = Exchange.query.filter(
-                Exchange.user_id == user_id,
-                Exchange.id != exchange_id,
-                Exchange.is_active == True
-            ).all()
-            for other in other_active:
-                other.is_active = False
-                logger.info(f"Auto-deactivated exchange {other.id} ({other.name}) because exchange {exchange_id} is being activated")
-
         ex.is_active = not ex.is_active
         db.session.commit()
         return ex.to_dict()
@@ -1268,6 +1254,14 @@ def get_exchanges():
     return jsonify({'success': True, 'data': ExchangeManager.get_user_exchanges(request.current_user.id)})
 
 
+@app.route('/api/exchanges/active', methods=['GET'])
+@jwt_required
+def get_active_exchanges():
+    """Get all exchanges for current user (for selector)."""
+    exchanges = Exchange.query.filter_by(user_id=request.current_user.id).all()
+    return jsonify({'success': True, 'data': [ex.to_dict() for ex in exchanges]})
+
+
 @app.route('/api/exchanges', methods=['POST'])
 @jwt_required
 def add_exchange():
@@ -1332,22 +1326,46 @@ def get_positions():
 @jwt_required
 def get_live_positions():
     user_id = request.current_user.id
-    exchanges = Exchange.query.filter_by(user_id=user_id, is_active=True).all()
-    all_positions = []
-    for ex in exchanges:
-        client = ExchangeManager.get_client(user_id, ex.id)
+    exchange_id = request.args.get('exchange_id', type=int)
+
+    if exchange_id:
+        # Single exchange positions
+        ex = db.session.get(Exchange, exchange_id)
+        if not ex or ex.user_id != user_id:
+            return jsonify({'success': False, 'error': 'Exchange not found'}), 404
+
+        client = ExchangeManager.get_client(user_id, exchange_id)
         if not client:
-            continue
+            return jsonify({'success': False, 'error': 'Client not found'}), 400
+
         try:
             data = client.get_positions()
             parsed = parse_all_positions(data, ex.name)
             for pos in parsed:
                 pos['exchange_id'] = ex.id
                 pos['exchange_name'] = ex.name
-                all_positions.append(pos)
+            return jsonify({'success': True, 'data': parsed})
         except Exception as e:
             logger.error(f"Live positions error for {ex.name}: {e}")
-    return jsonify(all_positions)
+            return jsonify({'success': False, 'error': str(e)}), 500
+    else:
+        # All active exchanges (legacy behavior)
+        exchanges = Exchange.query.filter_by(user_id=user_id, is_active=True).all()
+        all_positions = []
+        for ex in exchanges:
+            client = ExchangeManager.get_client(user_id, ex.id)
+            if not client:
+                continue
+            try:
+                data = client.get_positions()
+                parsed = parse_all_positions(data, ex.name)
+                for pos in parsed:
+                    pos['exchange_id'] = ex.id
+                    pos['exchange_name'] = ex.name
+                    all_positions.append(pos)
+            except Exception as e:
+                logger.error(f"Live positions error for {ex.name}: {e}")
+        return jsonify(all_positions)
 
 
 @app.route('/api/positions/<int:position_id>/close', methods=['POST'])
@@ -1415,21 +1433,48 @@ def get_sentiment():
 @jwt_required
 def get_balance():
     user_id = request.current_user.id
-    exchanges = Exchange.query.filter_by(user_id=user_id, is_active=True).all()
-    balances = {}
-    total = 0
-    for ex in exchanges:
-        client = ExchangeManager.get_client(user_id, ex.id)
+    exchange_id = request.args.get('exchange_id', type=int)
+
+    if exchange_id:
+        # Single exchange balance
+        ex = db.session.get(Exchange, exchange_id)
+        if not ex or ex.user_id != user_id:
+            return jsonify({'success': False, 'error': 'Exchange not found'}), 404
+
+        client = ExchangeManager.get_client(user_id, exchange_id)
         if not client:
-            continue
+            return jsonify({'success': False, 'error': 'Client not found'}), 400
+
         try:
             data = client.get_balance()
             bal = parse_balance(data, ex.name)
-            balances[ex.name] = {'total': bal, 'available': bal}
-            total += bal
+            return jsonify({
+                'success': True,
+                'exchange_id': exchange_id,
+                'exchange_name': ex.name,
+                'balance': bal,
+                'total': bal
+            })
         except Exception as e:
             logger.error(f"Balance error for {ex.name}: {e}")
-    return jsonify({'balances': balances, 'total': total})
+            return jsonify({'success': False, 'error': str(e)}), 500
+    else:
+        # All active exchanges (legacy behavior)
+        exchanges = Exchange.query.filter_by(user_id=user_id, is_active=True).all()
+        balances = {}
+        total = 0
+        for ex in exchanges:
+            client = ExchangeManager.get_client(user_id, ex.id)
+            if not client:
+                continue
+            try:
+                data = client.get_balance()
+                bal = parse_balance(data, ex.name)
+                balances[ex.name] = {'total': bal, 'available': bal}
+                total += bal
+            except Exception as e:
+                logger.error(f"Balance error for {ex.name}: {e}")
+        return jsonify({'balances': balances, 'total': total})
 
 
 # ═══════════════════════════════════════════════════════════════════════
