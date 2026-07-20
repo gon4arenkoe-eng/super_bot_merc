@@ -353,7 +353,7 @@ async function addExchange(e) {
     const result = await resp.json();
     if (result.success) { 
       alertBox.innerHTML = '<div style="background:rgba(0,229,160,0.15);color:#00e5a0;border:1px solid rgba(0,229,160,0.3);padding:12px;border-radius:8px;">Exchange added!</div>'; 
-      setTimeout(() => { hideModal('addExchangeModal'); location.reload(); }, 1000); 
+      setTimeout(() => { hideModal('addExchangeModal'); location.reload(); }, 1500); 
     }
     else { 
       alertBox.innerHTML = '<div style="background:rgba(255,85,119,0.15);color:#ff5577;border:1px solid rgba(255,85,119,0.3);padding:12px;border-radius:8px;">' + (result.error || 'Failed: ' + JSON.stringify(result)) + '</div>'; 
