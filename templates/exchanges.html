@@ -32,7 +32,8 @@
             <h3>Добавить биржу</h3>
             <button class="modal-close" onclick="closeAddModal()">&times;</button>
         </div>
-        <form id="addExchangeForm" onsubmit="return addExchange(event)">
+        <form id="addExchangeForm">
+            <div id="exchangeAlert"></div>
             <div class="form-group">
                 <label>Биржа <span class="required">*</span></label>
                 <select id="exchangeName" name="name" required>
@@ -44,7 +45,7 @@
             </div>
             <div class="form-group">
                 <label>Название <span class="required">*</span></label>
-                <input type="text" name="display_name" placeholder="Например: Моя BingX" required>
+                <input type="text" id="displayName" name="display_name" placeholder="Например: Моя BingX" required>
             </div>
             <div class="form-group">
                 <label>API Key <span class="required">*</span></label>
@@ -87,6 +88,80 @@
 
 {% block extra_js %}
 <script>
+// ═══════════════════════════════════════════════════════════════════════
+// TOKEN & API HELPERS
+// ═══════════════════════════════════════════════════════════════════════
+const TOKEN_KEY = 'sb_access_token';
+const REFRESH_KEY = 'sb_refresh_token';
+
+function getToken() { return localStorage.getItem(TOKEN_KEY); }
+function getRefreshToken() { return localStorage.getItem(REFRESH_KEY); }
+
+async function apiFetch(url, options = {}) {
+    if (!options.headers) options.headers = {};
+    if (!options.headers['Content-Type']) {
+        options.headers['Content-Type'] = 'application/json';
+    }
+    const token = getToken();
+    if (token) options.headers['Authorization'] = 'Bearer ' + token;
+
+    let res = await fetch(url, options);
+
+    if (res.status === 401 && getRefreshToken()) {
+        const refreshed = await refreshAccessToken();
+        if (refreshed) {
+            options.headers['Authorization'] = 'Bearer ' + getToken();
+            res = await fetch(url, options);
+        }
+    }
+    return res;
+}
+
+async function refreshAccessToken() {
+    const refreshToken = getRefreshToken();
+    if (!refreshToken) return false;
+    try {
+        const res = await fetch('/api/auth/refresh', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({refresh_token: refreshToken})
+        });
+        const data = await res.json();
+        if (data.success) {
+            localStorage.setItem(TOKEN_KEY, data.access_token);
+            localStorage.setItem(REFRESH_KEY, data.refresh_token);
+            return true;
+        }
+    } catch (e) {}
+    localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(REFRESH_KEY);
+    return false;
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// AUTH CHECK (silent — no redirect)
+// ═══════════════════════════════════════════════════════════════════════
+(async function checkAuth() {
+    const token = getToken();
+    if (!token) {
+        console.warn('No JWT token in localStorage, relying on cookie fallback');
+        return;
+    }
+    try {
+        const res = await apiFetch('/api/auth/me');
+        if (!res.ok) {
+            console.warn('JWT token invalid or expired');
+            localStorage.removeItem(TOKEN_KEY);
+            localStorage.removeItem(REFRESH_KEY);
+        }
+    } catch (e) {
+        console.error('Auth check error:', e);
+    }
+})();
+
+// ═══════════════════════════════════════════════════════════════════════
+// EXCHANGES LIST
+// ═══════════════════════════════════════════════════════════════════════
 document.addEventListener('DOMContentLoaded', loadExchanges);
 
 async function loadExchanges() {
@@ -94,12 +169,12 @@ async function loadExchanges() {
     container.innerHTML = '<div class="loading-state">Загрузка бирж...</div>';
 
     try {
-        const res = await fetch('/api/exchanges');
+        const res = await apiFetch('/api/exchanges');
         const data = await res.json();
         if (data.success) {
             renderExchanges(data.data || []);
         } else {
-            container.innerHTML = '<div class="empty-state">Ошибка загрузки</div>';
+            container.innerHTML = '<div class="empty-state">Ошибка загрузки: ' + (data.error || 'Unknown') + '</div>';
         }
     } catch (e) {
         container.innerHTML = '<div class="empty-state">Ошибка соединения</div>';
@@ -151,7 +226,7 @@ function renderExchanges(exchanges) {
                 </div>
             </div>
             <div class="exchange-actions">
-                <button class="btn btn-sm ${ex.is_active ? 'btn-warning' : 'btn-success'}" 
+                <button class="btn btn-sm ${ex.is_active ? 'btn-warning' : 'btn-success'}"
                         onclick="toggleExchange(${ex.id})">
                     ${ex.is_active ? 'Выключить' : 'Включить'}
                 </button>
@@ -167,57 +242,65 @@ function renderExchanges(exchanges) {
     `).join('');
 }
 
-function openAddModal() {
-    document.getElementById('addModal').classList.add('show');
-    document.body.style.overflow = 'hidden';
-}
-
-function closeAddModal() {
-    document.getElementById('addModal').classList.remove('show');
-    document.body.style.overflow = '';
-}
-
+// ═══════════════════════════════════════════════════════════════════════
+// ADD EXCHANGE
+// ═══════════════════════════════════════════════════════════════════════
 document.getElementById('addExchangeForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const form = e.target;
-    const formData = new FormData(form);
+    let alertBox = document.getElementById('exchangeAlert');
+    if (!alertBox) {
+        alertBox = document.createElement('div');
+        alertBox.id = 'exchangeAlert';
+        alertBox.style.marginBottom = '15px';
+        form.insertBefore(alertBox, form.firstChild);
+    }
+
+    const nameEl = document.getElementById('exchangeName');
+    const displayNameEl = document.getElementById('displayName');
+    const apiKeyEl = document.getElementById('apiKey');
+    const apiSecretEl = document.getElementById('apiSecret');
+    const passphraseEl = document.getElementById('passphrase');
+    const isDemoEl = document.getElementById('isDemo');
+
     const data = {
-        name: formData.get('name'),
-        display_name: formData.get('display_name').trim(),
-        api_key: formData.get('api_key').trim(),
-        api_secret: formData.get('api_secret').trim(),
-        passphrase: formData.get('passphrase')?.trim() || null,
-        is_demo: formData.has('is_demo')
+        name: nameEl.value.toLowerCase().trim(),
+        display_name: (displayNameEl.value || nameEl.value).trim(),
+        api_key: apiKeyEl.value.trim(),
+        api_secret: apiSecretEl.value.trim(),
+        passphrase: passphraseEl.value.trim() || null,
+        is_demo: isDemoEl.checked
     };
 
-    if (!data.name || !data.display_name || !data.api_key || !data.api_secret) {
-        showToast('Заполните все обязательные поля', 'error');
+    if (!data.name) {
+        alertBox.innerHTML = '<div style="background:rgba(255,85,119,0.15);color:#ff5577;border:1px solid rgba(255,85,119,0.3);padding:12px;border-radius:8px;">Выберите биржу</div>';
+        return;
+    }
+    if (!data.api_key || !data.api_secret) {
+        alertBox.innerHTML = '<div style="background:rgba(255,85,119,0.15);color:#ff5577;border:1px solid rgba(255,85,119,0.3);padding:12px;border-radius:8px;">API Key и API Secret обязательны</div>';
         return;
     }
 
     try {
-        const res = await fetch('/api/exchanges', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify(data)
-        });
-        const result = await res.json();
+        const resp = await apiFetch('/api/exchanges', { method: 'POST', body: JSON.stringify(data) });
+        const result = await resp.json();
         if (result.success) {
-            showToast('Биржа добавлена!', 'success');
-            closeAddModal();
-            form.reset();
-            loadExchanges();
+            alertBox.innerHTML = '<div style="background:rgba(0,229,160,0.15);color:#00e5a0;border:1px solid rgba(0,229,160,0.3);padding:12px;border-radius:8px;">Биржа добавлена!</div>';
+            setTimeout(() => { closeAddModal(); form.reset(); loadExchanges(); }, 1000);
         } else {
-            showToast(result.error || 'Ошибка сохранения', 'error');
+            alertBox.innerHTML = '<div style="background:rgba(255,85,119,0.15);color:#ff5577;border:1px solid rgba(255,85,119,0.3);padding:12px;border-radius:8px;">' + (result.error || 'Ошибка сохранения') + '</div>';
         }
-    } catch (e) {
-        showToast('Ошибка соединения', 'error');
+    } catch (err) {
+        alertBox.innerHTML = '<div style="background:rgba(255,85,119,0.15);color:#ff5577;border:1px solid rgba(255,85,119,0.3);padding:12px;border-radius:8px;">Ошибка: ' + err.message + '</div>';
     }
 });
 
+// ═══════════════════════════════════════════════════════════════════════
+// TOGGLE / DELETE
+// ═══════════════════════════════════════════════════════════════════════
 async function toggleExchange(id) {
     try {
-        const res = await fetch(`/api/exchanges/${id}/toggle`, {method: 'POST'});
+        const res = await apiFetch(`/api/exchanges/${id}/toggle`, {method: 'POST'});
         const data = await res.json();
         if (data.success) {
             showToast(data.data.is_active ? 'Биржа включена' : 'Биржа выключена', 'success');
@@ -233,7 +316,7 @@ async function toggleExchange(id) {
 async function deleteExchange(id) {
     if (!confirm('Удалить биржу? Это действие нельзя отменить.')) return;
     try {
-        const res = await fetch(`/api/exchanges/${id}`, {method: 'DELETE'});
+        const res = await apiFetch(`/api/exchanges/${id}`, {method: 'DELETE'});
         const data = await res.json();
         if (data.success) {
             showToast('Биржа удалена', 'success');
@@ -244,6 +327,21 @@ async function deleteExchange(id) {
     } catch (e) {
         showToast('Ошибка соединения', 'error');
     }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// MODAL & UTILS
+// ═══════════════════════════════════════════════════════════════════════
+function openAddModal() {
+    document.getElementById('addModal').classList.add('show');
+    document.body.style.overflow = 'hidden';
+}
+
+function closeAddModal() {
+    document.getElementById('addModal').classList.remove('show');
+    document.body.style.overflow = '';
+    const alertBox = document.getElementById('exchangeAlert');
+    if (alertBox) alertBox.innerHTML = '';
 }
 
 function showToast(message, type = 'info') {
@@ -265,115 +363,8 @@ function formatDate(dateStr) {
     return d.toLocaleDateString('ru-RU', {day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit'});
 }
 
-// Close modal on Escape
 document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') closeAddModal();
 });
-</script>
-<script>
-const TOKEN_KEY = 'sb_access_token';
-const REFRESH_KEY = 'sb_refresh_token';
-function getToken() { return localStorage.getItem(TOKEN_KEY); }
-function getRefreshToken() { return localStorage.getItem(REFRESH_KEY); }
-
-async function apiFetch(url, options = {}) {
-  if (!options.headers) options.headers = {};
-  options.headers['Content-Type'] = 'application/json';
-  const token = getToken();
-  if (token) options.headers['Authorization'] = 'Bearer ' + token;
-  let res = await fetch(url, options);
-  if (res.status === 401 && getRefreshToken()) {
-    const refreshed = await refreshAccessToken();
-    if (refreshed) {
-      options.headers['Authorization'] = 'Bearer ' + getToken();
-      res = await fetch(url, options);
-    }
-  }
-  return res;
-}
-
-async function refreshAccessToken() {
-  const refreshToken = getRefreshToken();
-  if (!refreshToken) return false;
-  try {
-    const res = await fetch('/api/auth/refresh', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({refresh_token: refreshToken}) });
-    const data = await res.json();
-    if (data.success) { localStorage.setItem(TOKEN_KEY, data.access_token); localStorage.setItem(REFRESH_KEY, data.refresh_token); return true; }
-  } catch (e) {}
-  localStorage.removeItem(TOKEN_KEY); localStorage.removeItem(REFRESH_KEY); return false;
-}
-
-(async function checkAuth() {
-  const token = getToken();
-  if (!token) { 
-    console.warn('No JWT token found'); 
-    // Don't redirect - let user see the page, API calls will fail with 401
-    return; 
-  }
-  try { 
-    const res = await apiFetch('/api/auth/me'); 
-    if (!res.ok) {
-      console.warn('JWT token invalid or expired');
-      // Clear invalid tokens
-      localStorage.removeItem(TOKEN_KEY);
-      localStorage.removeItem(REFRESH_KEY);
-    }
-  }
-  catch (e) { console.error('Auth check error:', e); }
-})();
-
-async function addExchange(e) {
-  e.preventDefault();
-  const form = document.getElementById('addExchangeForm');
-  let alertBox = document.getElementById('exchangeAlert');
-  if (!alertBox) { alertBox = document.createElement('div'); alertBox.id = 'exchangeAlert'; alertBox.style.marginBottom = '15px'; form.insertBefore(alertBox, form.firstChild); }
-
-  const nameEl = document.getElementById('exchangeName');
-  const apiKeyEl = document.getElementById('apiKey');
-  const apiSecretEl = document.getElementById('apiSecret');
-  const passphraseEl = document.getElementById('passphrase');
-  const isDemoEl = document.getElementById('isDemo');
-  const displayNameEl = document.getElementById('displayName');
-
-  const nameVal = nameEl && nameEl.value ? nameEl.value.toLowerCase() : '';
-  const displayNameVal = displayNameEl && displayNameEl.value ? displayNameEl.value.trim() : (nameVal || 'Exchange');
-  const apiKeyVal = apiKeyEl && apiKeyEl.value ? apiKeyEl.value.trim() : '';
-  const apiSecretVal = apiSecretEl && apiSecretEl.value ? apiSecretEl.value.trim() : '';
-  const passphraseVal = passphraseEl && passphraseEl.value ? passphraseEl.value.trim() : '';
-  const isDemoVal = isDemoEl ? isDemoEl.checked : true;
-
-  const data = {
-    name: nameVal,
-    display_name: displayNameVal,
-    api_key: apiKeyVal,
-    api_secret: apiSecretVal,
-    passphrase: passphraseVal || null,
-    is_demo: isDemoVal
-  };
-
-  if (!data.api_key || !data.api_secret) { 
-    alertBox.innerHTML = '<div style="background:rgba(255,85,119,0.15);color:#ff5577;border:1px solid rgba(255,85,119,0.3);padding:12px;border-radius:8px;">API Key and Secret are required</div>'; 
-    return false; 
-  }
-
-  try {
-    const resp = await apiFetch('/api/exchanges', { method: 'POST', body: JSON.stringify(data) });
-    if (resp.status === 401) {
-      alertBox.innerHTML = '<div style="background:rgba(255,85,119,0.15);color:#ff5577;border:1px solid rgba(255,85,119,0.3);padding:12px;border-radius:8px;">Session expired. Please <a href="/login">login again</a>.</div>'; 
-      return false;
-    }
-    const result = await resp.json();
-    if (result.success) { 
-      alertBox.innerHTML = '<div style="background:rgba(0,229,160,0.15);color:#00e5a0;border:1px solid rgba(0,229,160,0.3);padding:12px;border-radius:8px;">Exchange added!</div>'; 
-      setTimeout(() => { hideModal('addExchangeModal'); location.reload(); }, 1500); 
-    }
-    else { 
-      alertBox.innerHTML = '<div style="background:rgba(255,85,119,0.15);color:#ff5577;border:1px solid rgba(255,85,119,0.3);padding:12px;border-radius:8px;">' + (result.error || 'Failed: ' + JSON.stringify(result)) + '</div>'; 
-    }
-  } catch (err) { 
-    alertBox.innerHTML = '<div style="background:rgba(255,85,119,0.15);color:#ff5577;border:1px solid rgba(255,85,119,0.3);padding:12px;border-radius:8px;">Error: ' + err.message + '</div>'; 
-  }
-  return false;
-}
 </script>
 {% endblock %}
