@@ -900,23 +900,32 @@ class TradingEngine:
 
     def _process_user(self, user_id):
         exchanges = ExchangeManager.get_user_exchanges(user_id)
+        logger.info(f"Processing user {user_id}, found {len(exchanges)} exchanges")
         for ex in exchanges:
             if not ex.get('is_active'):
+                logger.info(f"Exchange {ex['name']} (ID:{ex['id']}) inactive, skipping")
                 continue
             exchange_id = ex['id']
             client = self._get_client(user_id, exchange_id)
             if not client:
+                logger.warning(f"No client for exchange {exchange_id}")
                 continue
             try:
+                logger.info(f"Getting balance for {ex['name']}...")
                 balance_data = client.get_balance()
+                logger.info(f"Balance raw for {ex['name']}: {str(balance_data)[:200]}")
                 balance = parse_balance(balance_data, ex['name'])
+                logger.info(f"Balance for {ex['name']}: {balance}")
 
+                logger.info(f"Getting positions for {ex['name']}...")
                 positions_data = client.get_positions()
                 self._sync_positions(user_id, exchange_id, positions_data, ex['name'])
 
+                logger.info(f"Starting analysis for {ex['name']} (balance={balance})")
                 self._analyze_and_trade(user_id, exchange_id, client, balance, ex['name'])
+                logger.info(f"Analysis complete for {ex['name']}")
             except Exception as e:
-                logger.error(f"Error processing exchange {exchange_id} for user {user_id}: {e}")
+                logger.error(f"Error processing exchange {exchange_id} for user {user_id}: {e}", exc_info=True)
 
     def _sync_positions(self, user_id, exchange_id, data, exchange_name):
         try:
@@ -966,38 +975,55 @@ class TradingEngine:
 
     def _analyze_and_trade(self, user_id, exchange_id, client, balance, exchange_name):
         symbols = ['BTC-USDT', 'ETH-USDT']
+        logger.info(f"Analyzing {len(symbols)} symbols for {exchange_name}, balance={balance}")
         for symbol in symbols:
             try:
+                logger.info(f"Fetching klines for {symbol}...")
                 klines_data = client.get_klines(symbol, interval='1h', limit=100)
+                logger.info(f"Klines raw for {symbol}: type={type(klines_data).__name__}, sample={str(klines_data)[:200]}")
+
                 if not isinstance(klines_data, dict):
-                    logger.warning(f"Klines invalid type for {symbol}: {type(klines_data)} = {klines_data}")
+                    logger.warning(f"Klines invalid type for {symbol}: {type(klines_data).__name__}")
                     continue
                 if 'error' in klines_data:
                     logger.warning(f"Klines API error for {symbol}: {klines_data['error']}")
                     continue
 
-                # FIX: Use universal parse_klines instead of parse_klines_bingx
                 candles = parse_klines(klines_data, exchange_name)
+                logger.info(f"Parsed {len(candles)} candles for {symbol}")
 
                 if not candles:
                     logger.info(f"No candles for {symbol}, skipping")
                     continue
                 signal = self.ema_strategy.analyze(candles)
+                logger.info(f"Signal for {symbol}: {signal['signal']} (confidence={signal.get('confidence', 0)}, price={signal.get('price', 0)})")
+
                 if signal['signal'] != 'NEUTRAL' and signal['confidence'] > 60:
+                    logger.info(f"EXECUTING signal for {symbol}: {signal['signal']}")
                     self._execute_signal(user_id, exchange_id, client, symbol, signal, balance, exchange_name)
+                else:
+                    logger.info(f"Signal filtered for {symbol}: neutral or low confidence")
             except Exception as e:
-                logger.error(f"Analysis error for {symbol}: {type(e).__name__}: {e}")
+                logger.error(f"Analysis error for {symbol}: {type(e).__name__}: {e}", exc_info=True)
 
     def _execute_signal(self, user_id, exchange_id, client, symbol, signal, balance, exchange_name):
         side = signal['signal']
         current_price = signal['price']
+        logger.info(f"EXECUTE: {side} {symbol} @ {current_price}, balance={balance}")
+
         current_positions = Position.query.filter_by(
             user_id=user_id, exchange_id=exchange_id, status='OPEN'
         ).count()
+        logger.info(f"Current positions: {current_positions}")
+
         position_size = balance * 0.02
+        logger.info(f"Position size: {position_size}")
+
         can_trade, reason = self.risk_manager.can_open_position(
             balance, position_size, current_positions
         )
+        logger.info(f"Risk check: {can_trade}, reason={reason}")
+
         if not can_trade:
             logger.info(f"Risk block: {reason}")
             return
@@ -1508,6 +1534,54 @@ def diagnose():
         except Exception as e:
             results.append({'exchange': ex['name'], 'error': str(e)})
     
+    return jsonify({
+        'success': True,
+        'timestamp': datetime.now(timezone.utc).isoformat(),
+        'exchanges_total': len(exchanges),
+        'active': len(active),
+        'engine_running': engine.running,
+        'engine_daily_pnl': engine.risk_manager.daily_pnl,
+        'results': results
+    })
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# API: DIAGNOSE (временный, для отладки)
+# ═══════════════════════════════════════════════════════════════════════
+
+@app.route('/api/diagnose')
+@jwt_required
+def diagnose():
+    user_id = request.current_user.id
+    exchanges = ExchangeManager.get_user_exchanges(user_id)
+    active = [e for e in exchanges if e.get('is_active')]
+
+    results = []
+    for ex in active:
+        client = ExchangeManager.get_client(user_id, ex['id'])
+        if not client:
+            results.append({'exchange': ex['name'], 'error': 'No client'})
+            continue
+
+        try:
+            bal = client.get_balance()
+            pos = client.get_positions()
+            klines = client.get_klines('BTC-USDT', '1h', 10)
+
+            results.append({
+                'exchange': ex['name'],
+                'id': ex['id'],
+                'demo': getattr(client, 'demo', 'unknown'),
+                'balance_type': type(bal).__name__,
+                'balance_sample': str(bal)[:300],
+                'positions_type': type(pos).__name__,
+                'positions_sample': str(pos)[:300],
+                'klines_type': type(klines).__name__,
+                'klines_sample': str(klines)[:300],
+            })
+        except Exception as e:
+            results.append({'exchange': ex['name'], 'error': str(e)})
+
     return jsonify({
         'success': True,
         'timestamp': datetime.now(timezone.utc).isoformat(),
