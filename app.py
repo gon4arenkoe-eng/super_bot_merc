@@ -1471,6 +1471,52 @@ def get_balance():
         except Exception as e:
             logger.error(f"Balance error for {ex.name}: {e}")
     return jsonify({'balances': balances, 'total': total})
+# ═══════════════════════════════════════════════════════════════════════
+# API: DIAGNOSE (временный, для отладки)
+# ═══════════════════════════════════════════════════════════════════════
+
+@app.route('/api/diagnose')
+@jwt_required
+def diagnose():
+    user_id = request.current_user.id
+    exchanges = ExchangeManager.get_user_exchanges(user_id)
+    active = [e for e in exchanges if e.get('is_active')]
+    
+    results = []
+    for ex in active:
+        client = ExchangeManager.get_client(user_id, ex['id'])
+        if not client:
+            results.append({'exchange': ex['name'], 'error': 'No client'})
+            continue
+        
+        try:
+            bal = client.get_balance()
+            pos = client.get_positions()
+            klines = client.get_klines('BTC-USDT', '1h', 10)
+            
+            results.append({
+                'exchange': ex['name'],
+                'id': ex['id'],
+                'demo': getattr(client, 'demo', 'unknown'),
+                'balance_type': type(bal).__name__,
+                'balance_sample': str(bal)[:300],
+                'positions_type': type(pos).__name__,
+                'positions_sample': str(pos)[:300],
+                'klines_type': type(klines).__name__,
+                'klines_sample': str(klines)[:300],
+            })
+        except Exception as e:
+            results.append({'exchange': ex['name'], 'error': str(e)})
+    
+    return jsonify({
+        'success': True,
+        'timestamp': datetime.now(timezone.utc).isoformat(),
+        'exchanges_total': len(exchanges),
+        'active': len(active),
+        'engine_running': engine.running,
+        'engine_daily_pnl': engine.risk_manager.daily_pnl,
+        'results': results
+    })
 
 
 # ═══════════════════════════════════════════════════════════════════════
