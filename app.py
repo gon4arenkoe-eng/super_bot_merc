@@ -1302,6 +1302,61 @@ def toggle_exchange(exchange_id):
 
 
 # ═══════════════════════════════════════════════════════════════════════
+# API: EXCHANGE SELECTOR (Active Exchange)
+# ═══════════════════════════════════════════════════════════════════════
+
+@app.route('/api/exchange/current', methods=['GET'])
+@jwt_required
+def get_current_exchange():
+    """Get currently selected active exchange for the user."""
+    user_id = request.current_user.id
+    # Get the first active exchange (strict mode — one active)
+    active_ex = Exchange.query.filter_by(user_id=user_id, is_active=True).first()
+    if active_ex:
+        return jsonify({
+            'success': True,
+            'data': active_ex.to_dict()
+        })
+    # No active exchange — return first available
+    first_ex = Exchange.query.filter_by(user_id=user_id).first()
+    if first_ex:
+        return jsonify({
+            'success': True,
+            'data': first_ex.to_dict()
+        })
+    return jsonify({'success': False, 'error': 'No exchanges configured'}), 404
+
+
+@app.route('/api/exchange/select', methods=['POST'])
+@jwt_required
+def select_exchange():
+    """Select (activate) a specific exchange. Strict mode: only one active."""
+    data = request.get_json() or {}
+    exchange_id = data.get('exchange_id')
+
+    if not exchange_id:
+        return jsonify({'success': False, 'error': 'exchange_id required'}), 400
+
+    user_id = request.current_user.id
+
+    # Verify exchange belongs to user
+    target = db.session.get(Exchange, exchange_id)
+    if not target or target.user_id != user_id:
+        return jsonify({'success': False, 'error': 'Exchange not found'}), 404
+
+    # STRICT MODE: Deactivate all other exchanges, activate selected
+    Exchange.query.filter_by(user_id=user_id).update({'is_active': False})
+    target.is_active = True
+    db.session.commit()
+
+    logger.info(f"User {user_id} selected exchange {target.name} (ID: {exchange_id})")
+    return jsonify({
+        'success': True,
+        'data': target.to_dict()
+    })
+
+
+# ═══════════════════════════════════════════════════════════════════════
 # API: POSITIONS
 # ═══════════════════════════════════════════════════════════════════════
 
