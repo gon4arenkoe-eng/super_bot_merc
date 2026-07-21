@@ -7,16 +7,10 @@
 <style>
 * { margin:0; padding:0; box-sizing:border-box; }
 body { font-family: 'Segoe UI', system-ui, sans-serif; background:#060b14; color:#e0e8f0; min-height:100vh; }
-
-/* === LAYOUT === */
 .mockup { max-width:1400px; margin:0 auto; background:#060b14; min-height:100vh; position:relative; }
-
-/* === TOPBAR === */
 .topbar { height:52px; background:#0d1525; border-bottom:1px solid #1a2a40; display:flex; align-items:center; justify-content:space-between; padding:0 20px; position:fixed; top:0; left:0; right:0; z-index:100; max-width:1400px; margin:0 auto; }
 .topbar-left { display:flex; align-items:center; gap:12px; }
-.brand-name { font-size:15px; font-weight:700; color:#e0e8f0; letter-spacing:.5px; }
-.brand-ver { font-size:11px; color:#6a809a; }
-.topbar-center { display:flex; gap:24px; }
+.topbar-center { display:flex; gap:24px; align-items:center; }
 .stat-pill { background:#131d33; border:1px solid #1a2a40; border-radius:8px; padding:6px 14px; display:flex; align-items:center; gap:8px; }
 .stat-pill .lbl { font-size:10px; color:#6a809a; text-transform:uppercase; }
 .stat-pill .val { font-family:monospace; font-size:13px; font-weight:600; color:#e0e8f0; }
@@ -26,29 +20,40 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background:#060b14; color
 .clock { font-family:monospace; font-size:12px; color:#6a809a; }
 .theme-btn { width:32px; height:32px; border-radius:8px; background:#131d33; border:1px solid #1a2a40; color:#6a809a; display:flex; align-items:center; justify-content:center; cursor:pointer; }
 
-/* === SIDEBAR === */
+/* EXCHANGE SELECTOR */
+.exchange-selector { position:relative; }
+.exchange-selector-btn { display:flex; align-items:center; gap:8px; padding:6px 12px; border-radius:8px; background:#131d33; border:1px solid #1a2a40; color:#e0e8f0; font-size:12px; font-weight:600; cursor:pointer; font-family:inherit; min-width:140px; }
+.exchange-selector-btn:hover { border-color:#00d4ff; }
+.exchange-selector-btn .tag { display:inline-block; padding:2px 6px; border-radius:4px; font-size:9px; font-weight:700; text-transform:uppercase; }
+.exchange-selector-btn .tag.demo { background:rgba(0,229,160,0.15); color:#00e5a0; }
+.exchange-selector-btn .tag.real { background:rgba(255,85,119,0.15); color:#ff5577; }
+.exchange-dropdown { display:none; position:absolute; top:calc(100% + 4px); left:0; background:#131d33; border:1px solid #1a2a40; border-radius:10px; min-width:220px; z-index:200; overflow:hidden; box-shadow:0 8px 32px rgba(0,0,0,0.4); }
+.exchange-dropdown.active { display:block; }
+.exchange-dropdown-item { display:flex; align-items:center; justify-content:space-between; padding:10px 14px; cursor:pointer; border-bottom:1px solid rgba(26,42,64,0.5); font-size:12px; color:#e0e8f0; }
+.exchange-dropdown-item:last-child { border-bottom:none; }
+.exchange-dropdown-item:hover { background:rgba(0,212,255,0.06); }
+.exchange-dropdown-item.active { background:rgba(0,212,255,0.1); border-left:3px solid #00d4ff; }
+.exchange-dropdown-item .ex-name { font-weight:600; }
+.exchange-dropdown-item .ex-tag { font-size:9px; padding:2px 6px; border-radius:4px; }
+.exchange-dropdown-item .ex-tag.demo { background:rgba(0,229,160,0.15); color:#00e5a0; }
+.exchange-dropdown-item .ex-tag.real { background:rgba(255,85,119,0.15); color:#ff5577; }
+
 .sidebar { width:220px; background:#0d1525; border-right:1px solid #1a2a40; padding:16px 0; position:fixed; top:52px; bottom:0; left:0; z-index:90; overflow-y:auto; }
 .nav-item { display:flex; align-items:center; gap:12px; padding:14px 18px; margin:4px 10px; color:#6a809a; font-size:14px; font-weight:500; cursor:pointer; border-radius:10px; border:1px solid transparent; background:transparent; transition:all 0.2s ease; text-decoration:none; }
 .nav-item:hover { color:#00d4ff; background:rgba(0,212,255,0.08); border-color:rgba(0,212,255,0.25); }
 .nav-item.active { background:rgba(0,212,255,0.1); color:#00d4ff; border:1px solid rgba(0,212,255,0.35); }
 .nav-item svg { flex:none; width:20px; height:20px; }
-
 .divider { height:1px; background:#1a2a40; margin:12px 16px; }
-
 .section-title { font-size:10px; color:#6a809a; text-transform:uppercase; letter-spacing:.08em; padding:0 18px; margin-bottom:8px; display:flex; align-items:center; gap:8px; }
 .watchlist-item { display:flex; align-items:center; justify-content:space-between; padding:6px 18px; font-family:monospace; font-size:12px; }
 .watchlist-item .sym { color:#e0e8f0; font-weight:600; }
 .watchlist-item .price { color:#00e5a0; }
 .watchlist-item .change { color:#ff5577; font-size:10px; }
-
 .preset-row { display:flex; gap:4px; padding:0 18px; margin-bottom:8px; }
 .preset-btn { flex:1; padding:8px 4px; border:1px solid #1a2a40; border-radius:6px; background:#131d33; color:#6a809a; font-size:11px; font-weight:600; text-align:center; cursor:pointer; }
 .preset-btn.active { border-color:#00d4ff; background:rgba(0,212,255,.1); color:#00d4ff; }
 
-/* === MAIN CONTENT === */
 .main { margin-left:220px; padding:72px 20px 20px; display:grid; grid-template-columns:1fr 280px; gap:20px; }
-
-/* Stats row */
 .stats-row { grid-column:1 / -1; display:grid; grid-template-columns:repeat(5, 1fr); gap:14px; margin-bottom:4px; }
 .stat-card { background:#131d33; border:1px solid #1a2a40; border-radius:10px; padding:16px; position:relative; overflow:hidden; }
 .stat-card::before { content:''; position:absolute; top:0; left:0; right:0; height:2px; background:linear-gradient(90deg, transparent, #00d4ff, transparent); opacity:.3; }
@@ -58,7 +63,6 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background:#060b14; color
 .stat-card .val.neg { color:#ff5577; }
 .stat-card .sub { font-size:11px; color:#6a809a; margin-top:4px; }
 
-/* Positions table */
 .positions-area { background:#131d33; border:1px solid #1a2a40; border-radius:10px; padding:20px; }
 .positions-area h3 { font-size:13px; font-weight:700; color:#e0e8f0; margin-bottom:16px; display:flex; align-items:center; gap:8px; }
 .table-header { display:grid; grid-template-columns:2fr 1fr 1fr 1fr 1fr 1fr 1fr; gap:12px; padding:10px 0; border-bottom:1px solid #1a2a40; font-size:10px; color:#8aa4c8; text-transform:uppercase; letter-spacing:.06em; font-weight:600; }
@@ -72,12 +76,10 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background:#060b14; color
 .table-row .action-btn { background:rgba(255,85,119,.15); color:#ff5577; border:1px solid rgba(255,85,119,.3); border-radius:4px; padding:4px 10px; font-size:10px; cursor:pointer; font-family:inherit; }
 .table-row .action-btn:hover { background:rgba(255,85,119,.25); }
 
-/* Chart area */
 .chart-area { background:#131d33; border:1px solid #1a2a40; border-radius:10px; padding:20px; height:280px; position:relative; }
 .chart-area h3 { font-size:13px; font-weight:700; color:#e0e8f0; margin-bottom:16px; display:flex; align-items:center; gap:8px; }
 .chart-placeholder { width:100%; height:200px; background:linear-gradient(180deg, rgba(0,212,255,.05) 0%, transparent 100%); border-radius:8px; position:relative; overflow:hidden; display:flex; align-items:center; justify-content:center; color:#6a809a; font-size:12px; }
 
-/* Terminal */
 .terminal { background:#0a0f1a; border:1px solid #1a2a40; border-radius:10px; padding:16px; height:200px; overflow:hidden; }
 .terminal-header { display:flex; align-items:center; gap:8px; margin-bottom:12px; }
 .terminal-header .dot { width:8px; height:8px; border-radius:50%; }
@@ -91,7 +93,6 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background:#060b14; color
 .terminal-line .ok { color:#00e5a0; }
 .terminal-line .err { color:#ff5577; }
 
-/* === RIGHT RAIL === */
 .rail { display:flex; flex-direction:column; gap:14px; }
 .rail-card { background:#131d33; border:1px solid #1a2a40; border-radius:10px; padding:16px; }
 .rail-card h4 { font-size:12px; font-weight:700; color:#e0e8f0; margin-bottom:14px; display:flex; align-items:center; gap:8px; }
@@ -110,7 +111,6 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background:#060b14; color
 .status-row .val.neg { color:#ff5577; }
 .status-row .val.neu { color:#6a809a; }
 
-/* Nexus buttons */
 .nexus-btn { display:inline-flex; align-items:center; justify-content:center; gap:6px; padding:10px 18px; border-radius:8px; border:1px solid #1a2a40; background:#131d33; color:#e0e8f0; font-size:12px; font-weight:600; font-family:inherit; cursor:pointer; transition:all 0.2s; position:relative; overflow:hidden; }
 .nexus-btn:hover { transform:translateY(-2px); box-shadow:0 8px 20px rgba(0,0,0,0.3); border-color:#00d4ff; }
 .nexus-btn:active { transform:translateY(0); }
@@ -119,7 +119,6 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background:#060b14; color
 .nexus-btn-success { background:rgba(0,229,160,0.1); border-color:rgba(0,229,160,0.35); color:#00e5a0; }
 .nexus-btn-sm { padding:6px 12px; font-size:11px; }
 
-/* Modal */
 .modal-overlay { display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.7); z-index:200; justify-content:center; align-items:center; }
 .modal-overlay.active { display:flex; }
 .modal { background:#131d33; border:1px solid #1a2a40; border-radius:16px; padding:30px; width:90%; max-width:500px; }
@@ -132,18 +131,15 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background:#060b14; color
 .alert.error { background:rgba(255,85,119,0.15); color:#ff5577; border:1px solid rgba(255,85,119,0.3); }
 .alert.success { background:rgba(0,229,160,0.15); color:#00e5a0; border:1px solid rgba(0,229,160,0.3); }
 
-/* Exchange tags */
 .exchange-tag { display:inline-block; padding:3px 8px; border-radius:4px; font-size:10px; font-weight:600; text-transform:uppercase; }
 .exchange-tag.bingx { background:rgba(245,158,11,0.15); color:#f59e0b; }
 .exchange-tag.binance { background:rgba(251,191,36,0.15); color:#fbbf24; }
 .exchange-tag.bybit { background:rgba(139,92,246,0.15); color:#8b5cf6; }
 .exchange-tag.okx { background:rgba(16,185,129,0.15); color:#10b981; }
 
-/* Demo badge */
 .demo-badge { display:inline-block; padding:2px 8px; border-radius:4px; font-size:10px; font-weight:600; background:rgba(0,229,160,0.15); color:#00e5a0; }
 .demo-badge.real { background:rgba(255,85,119,0.15); color:#ff5577; }
 
-/* Scrollbar */
 ::-webkit-scrollbar { width:6px; }
 ::-webkit-scrollbar-track { background:#0a0f1a; }
 ::-webkit-scrollbar-thumb { background:#1a2a40; border-radius:3px; }
@@ -156,7 +152,6 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background:#060b14; color
 <body>
 
 <div class="mockup">
-
   <!-- TOPBAR -->
   <div class="topbar">
     <div class="topbar-left">
@@ -172,6 +167,16 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background:#060b14; color
       </div>
     </div>
     <div class="topbar-center">
+      <!-- EXCHANGE SELECTOR -->
+      <div class="exchange-selector" id="exchangeSelector">
+        <button class="exchange-selector-btn" onclick="toggleExchangeDropdown()">
+          <svg width="14" height="14" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5" fill="none"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8"/><path d="M12 17v4"/></svg>
+          <span id="exchangeSelectorName">Loading...</span>
+          <span class="tag demo" id="exchangeSelectorTag">DEMO</span>
+          <svg width="12" height="12" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" fill="none"><path d="M6 9l6 6 6-6"/></svg>
+        </button>
+        <div class="exchange-dropdown" id="exchangeDropdown"></div>
+      </div>
       <div class="stat-pill">
         <span class="lbl">Balance</span>
         <span class="val" id="topBalance">$0.00</span>
@@ -204,6 +209,11 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background:#060b14; color
       <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="1.5" fill="none"><path d="M3 18L9 12L13 16L21 6"/><circle cx="21" cy="6" r="1.5" fill="currentColor"/></svg>
       Positions
     </a>
+    <!-- MANAGE EXCHANGES -->
+    <a href="/exchanges" class="nav-item">
+      <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="1.5" fill="none"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8"/><path d="M12 17v4"/></svg>
+      Manage Exchanges
+    </a>
     <a href="#" class="nav-item" onclick="alert('Coming soon')">
       <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="1.5" fill="none"><path d="M4 6h16"/><path d="M4 12h12"/><path d="M4 18h8"/></svg>
       Orders
@@ -216,9 +226,7 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background:#060b14; color
       <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="1.5" fill="none"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>
       Settings
     </a>
-
     <div class="divider"></div>
-
     <div class="section-title">
       <svg width="14" height="14" viewBox="0 0 24 24" stroke="#00d4ff" stroke-width="1.5" fill="none"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
       Watchlist
@@ -233,9 +241,7 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background:#060b14; color
       <span class="price" id="ethPrice">$3,520</span>
       <span class="change" id="ethChange">-0.8%</span>
     </div>
-
     <div class="divider"></div>
-
     <div class="section-title">
       <svg width="14" height="14" viewBox="0 0 24 24" stroke="#00d4ff" stroke-width="1.5" fill="none"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
       Risk Profile
@@ -249,7 +255,6 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background:#060b14; color
 
   <!-- MAIN -->
   <div class="main">
-
     <!-- STATS ROW -->
     <div class="stats-row">
       <div class="stat-card">
@@ -281,7 +286,6 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background:#060b14; color
 
     <!-- LEFT COLUMN -->
     <div style="display:flex; flex-direction:column; gap:14px;">
-
       <!-- OPEN POSITIONS -->
       <div class="positions-area">
         <h3>
@@ -292,13 +296,7 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background:#060b14; color
           </span>
         </h3>
         <div class="table-header">
-          <div>Symbol</div>
-          <div>Side</div>
-          <div>Size</div>
-          <div>Entry</div>
-          <div>Mark</div>
-          <div>PnL</div>
-          <div>Action</div>
+          <div>Symbol</div><div>Side</div><div>Size</div><div>Entry</div><div>Mark</div><div>PnL</div><div>Action</div>
         </div>
         <div id="positionsList">
           {% for pos in positions %}
@@ -347,9 +345,7 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background:#060b14; color
       <!-- TERMINAL -->
       <div class="terminal" style="height:160px;">
         <div class="terminal-header" style="margin-bottom:6px;">
-          <div class="dot red"></div>
-          <div class="dot yellow"></div>
-          <div class="dot green"></div>
+          <div class="dot red"></div><div class="dot yellow"></div><div class="dot green"></div>
           <span>Terminal</span>
         </div>
         <div id="terminalLines">
@@ -361,7 +357,6 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background:#060b14; color
 
     <!-- RIGHT RAIL -->
     <div class="rail">
-
       <!-- BOT CONTROL -->
       <div class="rail-card">
         <h4>
@@ -440,7 +435,6 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background:#060b14; color
         </div>
       </div>
     </div>
-
   </div>
 </div>
 
@@ -472,9 +466,7 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background:#060b14; color
         <input type="text" name="passphrase" id="passphrase" placeholder="Enter Passphrase">
       </div>
       <div class="form-group">
-        <label>
-          <input type="checkbox" name="is_demo" id="isDemo" checked> DEMO Mode
-        </label>
+        <label><input type="checkbox" name="is_demo" id="isDemo" checked> DEMO Mode</label>
       </div>
       <button type="submit" class="nexus-btn nexus-btn-primary" style="width:100%">Add Exchange</button>
       <button type="button" class="nexus-btn" style="width:100%; margin-top:8px;" onclick="hideModal('addExchangeModal')">Cancel</button>
@@ -483,7 +475,19 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background:#060b14; color
 </div>
 
 <script>
-// Clock
+// ═══════════════════════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════════════════════
+let currentExchangeId = null;
+let exchanges = [];
+let adaptiveTimer = null;
+let lastDataHash = '';
+let consecutiveSameData = 0;
+let isDataChanging = false;
+
+// ═══════════════════════════════════════════════════════════════════════
+// CLOCK
+// ═══════════════════════════════════════════════════════════════════════
 function updateClock() {
   const now = new Date();
   document.getElementById('clock').textContent = now.toISOString().substr(11, 8) + ' UTC';
@@ -491,7 +495,9 @@ function updateClock() {
 setInterval(updateClock, 1000);
 updateClock();
 
-// Uptime counter
+// ═══════════════════════════════════════════════════════════════════════
+// UPTIME COUNTER
+// ═══════════════════════════════════════════════════════════════════════
 let uptimeSeconds = 0;
 function updateUptime() {
   uptimeSeconds++;
@@ -502,27 +508,171 @@ function updateUptime() {
 }
 setInterval(updateUptime, 1000);
 
-// API helper with JWT from cookie
-async function apiFetch(url, options = {}) {
-  if (!options.headers) options.headers = {};
-  options.headers['Content-Type'] = 'application/json';
-  // Get token from cookie for page navigation
+// ═══════════════════════════════════════════════════════════════════════
+// API HELPER with JWT from cookie + localStorage fallback
+// ═══════════════════════════════════════════════════════════════════════
+function getToken() {
   const cookies = document.cookie.split(';');
-  let token = '';
   for (let c of cookies) {
     const [name, value] = c.trim().split('=');
     if (name === 'access_token') {
-      token = decodeURIComponent(value);
-      break;
+      return decodeURIComponent(value);
     }
   }
+  return localStorage.getItem('access_token') || '';
+}
+
+async function apiFetch(url, options = {}) {
+  if (!options.headers) options.headers = {};
+  options.headers['Content-Type'] = 'application/json';
+  const token = getToken();
   if (token) {
     options.headers['Authorization'] = 'Bearer ' + token;
   }
   return fetch(url, options);
 }
 
-// Load data
+// ═══════════════════════════════════════════════════════════════════════
+// EXCHANGE SELECTOR
+// ═══════════════════════════════════════════════════════════════════════
+async function loadExchanges() {
+  try {
+    const res = await apiFetch('/api/exchanges');
+    const result = await res.json();
+    if (result.success && result.data) {
+      exchanges = result.data;
+      renderExchangeDropdown();
+      const active = exchanges.find(e => e.is_active);
+      if (active) {
+        selectExchangeUI(active.id, false);
+      } else if (exchanges.length > 0) {
+        selectExchangeUI(exchanges[0].id, true);
+      }
+    }
+  } catch (e) {
+    console.error('Load exchanges error:', e);
+    logTerminal('EXCHANGE', 'Failed to load exchanges', 'err');
+  }
+}
+
+function renderExchangeDropdown() {
+  const dropdown = document.getElementById('exchangeDropdown');
+  if (!exchanges.length) {
+    dropdown.innerHTML = '<div class="exchange-dropdown-item" style="color:#6a809a;">No exchanges</div>';
+    return;
+  }
+  let html = '';
+  exchanges.forEach(ex => {
+    const tagClass = ex.is_demo ? 'demo' : 'real';
+    const tagText = ex.is_demo ? 'DEMO' : 'REAL';
+    const activeClass = ex.id === currentExchangeId ? 'active' : '';
+    html += '<div class="exchange-dropdown-item ' + activeClass + '" onclick="selectExchangeUI(' + ex.id + ', true)">' +
+      '<span class="ex-name">' + (ex.display_name || ex.name.toUpperCase()) + '</span>' +
+      '<span class="ex-tag ' + tagClass + '">' + tagText + '</span>' +
+      '</div>';
+  });
+  dropdown.innerHTML = html;
+}
+
+function toggleExchangeDropdown() {
+  document.getElementById('exchangeDropdown').classList.toggle('active');
+}
+
+async function selectExchangeUI(exchangeId, shouldPost) {
+  currentExchangeId = exchangeId;
+  const ex = exchanges.find(e => e.id === exchangeId);
+  if (!ex) return;
+
+  document.getElementById('exchangeSelectorName').textContent = ex.display_name || ex.name.toUpperCase();
+  const tag = document.getElementById('exchangeSelectorTag');
+  tag.textContent = ex.is_demo ? 'DEMO' : 'REAL';
+  tag.className = 'tag ' + (ex.is_demo ? 'demo' : 'real');
+
+  renderExchangeDropdown();
+  document.getElementById('exchangeDropdown').classList.remove('active');
+
+  if (shouldPost) {
+    try {
+      const res = await apiFetch('/api/exchange/select', {
+        method: 'POST',
+        body: JSON.stringify({ exchange_id: exchangeId })
+      });
+      const result = await res.json();
+      if (result.success) {
+        logTerminal('EXCHANGE', 'Switched to ' + (ex.display_name || ex.name.toUpperCase()) + ' (' + (ex.is_demo ? 'DEMO' : 'REAL') + ')', 'ok');
+        loadData();
+      } else {
+        logTerminal('EXCHANGE', 'Switch failed: ' + (result.error || 'Unknown'), 'err');
+      }
+    } catch (e) {
+      logTerminal('EXCHANGE', 'Switch error: ' + e.message, 'err');
+    }
+  }
+}
+
+// Close dropdown on outside click
+document.addEventListener('click', function(e) {
+  const selector = document.getElementById('exchangeSelector');
+  if (selector && !selector.contains(e.target)) {
+    document.getElementById('exchangeDropdown').classList.remove('active');
+  }
+  if (e.target.classList.contains('modal-overlay')) {
+    e.target.classList.remove('active');
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// ADAPTIVE POLLING (1-10 sec)
+// ═══════════════════════════════════════════════════════════════════════
+function computeDataHash(data) {
+  const balance = data.balance ? data.balance.total : 0;
+  const positions = data.positions ? data.positions.length : 0;
+  const botRunning = data.botStatus ? data.botStatus.running : false;
+  return balance.toFixed(2) + '|' + positions + '|' + botRunning;
+}
+
+function getAdaptiveInterval() {
+  if (isDataChanging) return 1000;
+  if (consecutiveSameData > 5) return 10000;
+  if (consecutiveSameData > 2) return 5000;
+  return 3000;
+}
+
+function startAdaptivePolling() {
+  if (adaptiveTimer) clearTimeout(adaptiveTimer);
+
+  async function tick() {
+    try {
+      const beforeHash = lastDataHash;
+      await loadData();
+      const afterHash = lastDataHash;
+
+      if (beforeHash !== afterHash) {
+        isDataChanging = true;
+        consecutiveSameData = 0;
+      } else {
+        consecutiveSameData++;
+        if (consecutiveSameData > 2) isDataChanging = false;
+      }
+    } catch (e) {
+      console.error('Adaptive tick error:', e);
+    }
+    const interval = getAdaptiveInterval();
+    adaptiveTimer = setTimeout(tick, interval);
+  }
+  tick();
+}
+
+function stopAdaptivePolling() {
+  if (adaptiveTimer) {
+    clearTimeout(adaptiveTimer);
+    adaptiveTimer = null;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// LOAD DATA
+// ═══════════════════════════════════════════════════════════════════════
 async function loadData() {
   try {
     const [balanceRes, positionsRes, botRes] = await Promise.all([
@@ -535,13 +685,13 @@ async function loadData() {
     const positions = await positionsRes.json();
     const botStatus = await botRes.json();
 
-    // Update stats
+    lastDataHash = computeDataHash({ balance, positions, botStatus });
+
     document.getElementById('topBalance').textContent = '$' + (balance.total || 0).toLocaleString('en-US', {minimumFractionDigits: 2});
     document.getElementById('statBalance').textContent = '$' + (balance.total || 0).toLocaleString('en-US', {minimumFractionDigits: 0});
     document.getElementById('topOpen').textContent = positions.length + ' / 10';
     document.getElementById('statOpen').innerHTML = positions.length + ' <span style="font-size:14px;color:#6a809a;">/ 10</span>';
 
-    // Update bot status
     if (botStatus.running) {
       document.getElementById('btnStart').style.display = 'none';
       document.getElementById('btnStop').style.display = 'block';
@@ -552,11 +702,10 @@ async function loadData() {
       document.getElementById('botStatusText').innerHTML = '<svg width="8" height="8" viewBox="0 0 8 8"><circle cx="4" cy="4" r="4" fill="#6a809a"/></svg>READY';
     }
 
-    // Update positions table
     updatePositionsTable(positions);
-
   } catch (e) {
     console.error('Load data error:', e);
+    logTerminal('DATA', 'Failed to load data', 'err');
   }
 }
 
@@ -566,50 +715,83 @@ function updatePositionsTable(positions) {
     container.innerHTML = '<div style="text-align:center; padding:30px; color:#6a809a; font-size:13px;">No open positions</div>';
     return;
   }
-
   let html = '';
   positions.forEach(pos => {
     const pnlClass = pos.pnl >= 0 ? 'pnl-pos' : 'pnl-neg';
     const pnlSign = pos.pnl >= 0 ? '+' : '';
     const sideClass = pos.side === 'LONG' ? 'side-long' : 'side-short';
-    // FIX: Use position_id directly for close API
-    html += `<div class="table-row">
-      <div class="sym">${pos.symbol}</div>
-      <div class="${sideClass}">${pos.side}</div>
-      <div>${pos.size?.toFixed(4) || '0.0000'}</div>
-      <div>$${pos.entry_price?.toFixed(2) || '0.00'}</div>
-      <div>$${pos.mark_price?.toFixed(2) || pos.entry_price?.toFixed(2) || '0.00'}</div>
-      <div class="${pnlClass}">${pnlSign}${pos.pnl?.toFixed(2) || '0.00'}</div>
-      <div><button class="action-btn" onclick="closePosition(${pos.id || 0})">Close</button></div>
-    </div>`;
+    html += '<div class="table-row">' +
+      '<div class="sym">' + pos.symbol + '</div>' +
+      '<div class="' + sideClass + '">' + pos.side + '</div>' +
+      '<div>' + (pos.size ? pos.size.toFixed(4) : '0.0000') + '</div>' +
+      '<div>$' + (pos.entry_price ? pos.entry_price.toFixed(2) : '0.00') + '</div>' +
+      '<div>$' + (pos.mark_price ? pos.mark_price.toFixed(2) : (pos.entry_price ? pos.entry_price.toFixed(2) : '0.00')) + '</div>' +
+      '<div class="' + pnlClass + '">' + pnlSign + (pos.pnl ? pos.pnl.toFixed(2) : '0.00') + '</div>' +
+      '<div><button class="action-btn" onclick="closePosition(' + (pos.id || 0) + ')">Close</button></div>' +
+      '</div>';
   });
   container.innerHTML = html;
 }
 
-// Bot control
+// ═══════════════════════════════════════════════════════════════════════
+// TERMINAL LOG
+// ═══════════════════════════════════════════════════════════════════════
+function logTerminal(tag, message, type) {
+  type = type || 'ok';
+  const container = document.getElementById('terminalLines');
+  const now = new Date();
+  const time = now.toISOString().substr(11, 8);
+  const typeClass = type === 'err' ? 'err' : (type === 'ok' ? 'ok' : '');
+  const line = document.createElement('div');
+  line.className = 'terminal-line';
+  line.innerHTML = '<span class="time">' + time + '</span> <span class="tag">[' + tag + ']</span> <span class="' + typeClass + '">' + message + '</span>';
+  container.appendChild(line);
+  while (container.children.length > 50) {
+    container.removeChild(container.firstChild);
+  }
+  container.scrollTop = container.scrollHeight;
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// BOT CONTROL
+// ═══════════════════════════════════════════════════════════════════════
 async function startBot() {
-  await apiFetch('/api/bot/start', {method: 'POST'});
-  loadData();
+  try {
+    await apiFetch('/api/bot/start', {method: 'POST'});
+    logTerminal('BOT', 'Bot started', 'ok');
+    loadData();
+  } catch (e) {
+    logTerminal('BOT', 'Start failed: ' + e.message, 'err');
+  }
 }
 
 async function stopBot() {
-  await apiFetch('/api/bot/stop', {method: 'POST'});
-  loadData();
+  try {
+    await apiFetch('/api/bot/stop', {method: 'POST'});
+    logTerminal('BOT', 'Bot stopped', 'ok');
+    loadData();
+  } catch (e) {
+    logTerminal('BOT', 'Stop failed: ' + e.message, 'err');
+  }
 }
 
 async function emergencyClose() {
   if (!confirm('EMERGENCY: Close ALL positions?')) return;
-  const res = await apiFetch('/api/positions/live');
-  const positions = await res.json();
-  for (const pos of positions) {
-    if (pos.id) {
-      await apiFetch('/api/positions/' + pos.id + '/close', {method: 'POST'});
+  try {
+    const res = await apiFetch('/api/positions/live');
+    const positions = await res.json();
+    for (const pos of positions) {
+      if (pos.id) {
+        await apiFetch('/api/positions/' + pos.id + '/close', {method: 'POST'});
+      }
     }
+    logTerminal('EMERGENCY', 'All positions closed', 'ok');
+    loadData();
+  } catch (e) {
+    logTerminal('EMERGENCY', 'Close all failed: ' + e.message, 'err');
   }
-  loadData();
 }
 
-// FIX: closePosition now uses position_id directly
 async function closePosition(positionId) {
   if (!positionId) {
     console.error('closePosition: no positionId provided');
@@ -620,18 +802,20 @@ async function closePosition(positionId) {
     const res = await apiFetch('/api/positions/' + positionId + '/close', {method: 'POST'});
     const data = await res.json();
     if (data.success) {
-      console.log('Position closed:', data);
+      logTerminal('POSITION', 'Closed #' + positionId, 'ok');
     } else {
-      console.error('Close failed:', data.error);
+      logTerminal('POSITION', 'Close failed: ' + (data.error || 'Unknown'), 'err');
       alert('Close failed: ' + (data.error || 'Unknown error'));
     }
   } catch (e) {
-    console.error('Close error:', e);
+    logTerminal('POSITION', 'Close error: ' + e.message, 'err');
   }
   loadData();
 }
 
-// Exchange modal
+// ═══════════════════════════════════════════════════════════════════════
+// EXCHANGE MODAL
+// ═══════════════════════════════════════════════════════════════════════
 function showModal(id) { document.getElementById(id).classList.add('active'); }
 function hideModal(id) { document.getElementById(id).classList.remove('active'); }
 
@@ -662,40 +846,97 @@ async function addExchange(e) {
 
     if (result.success) {
       alert.innerHTML = '<div class="alert success">Exchange added!</div>';
-      setTimeout(() => { hideModal('addExchangeModal'); location.reload(); }, 1000);
+      logTerminal('EXCHANGE', 'Added ' + data.name.toUpperCase() + ' (' + (data.is_demo ? 'DEMO' : 'REAL') + ')', 'ok');
+      setTimeout(function() { hideModal('addExchangeModal'); loadExchanges(); }, 1000);
     } else {
       alert.innerHTML = '<div class="alert error">' + (result.error || 'Failed') + '</div>';
+      logTerminal('EXCHANGE', 'Add failed: ' + (result.error || 'Unknown'), 'err');
     }
   } catch (err) {
     alert.innerHTML = '<div class="alert error">Network error</div>';
+    logTerminal('EXCHANGE', 'Network error', 'err');
   }
   return false;
 }
 
-// Quick actions
-function autoOptimize() { alert('Auto-optimize started'); }
-function exportCSV() { alert('Export started'); }
-function trainML() { alert('ML training started'); }
-function refreshData() { loadData(); }
+// ═══════════════════════════════════════════════════════════════════════
+// QUICK ACTIONS
+// ═══════════════════════════════════════════════════════════════════════
+function autoOptimize() { 
+  logTerminal('OPTIMIZE', 'Auto-optimize started', 'ok');
+  alert('Auto-optimize started'); 
+}
+function exportCSV() { 
+  logTerminal('EXPORT', 'CSV export started', 'ok');
+  alert('Export started'); 
+}
+function trainML() { 
+  logTerminal('ML', 'Training started', 'ok');
+  alert('ML training started'); 
+}
+function refreshData() { 
+  logTerminal('DATA', 'Manual refresh', 'ok');
+  loadData(); 
+}
 function toggleDCA() {
   const toggle = document.getElementById('dcaToggle');
   toggle.classList.toggle('active');
+  logTerminal('DCA', toggle.classList.contains('active') ? 'Enabled' : 'Disabled', 'ok');
 }
 function setRisk(profile) {
-  document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.preset-btn').forEach(function(b) { b.classList.remove('active'); });
   event.target.classList.add('active');
+  logTerminal('RISK', 'Profile set to ' + profile.toUpperCase(), 'ok');
 }
-function toggleTheme() { alert('Theme toggle'); }
+function toggleTheme() { 
+  logTerminal('THEME', 'Theme toggle', 'ok');
+  alert('Theme toggle'); 
+}
 
-// Close modal on outside click
-document.addEventListener('click', function(e) {
-  if (e.target.classList.contains('modal-overlay')) e.target.classList.remove('active');
-});
+// ═══════════════════════════════════════════════════════════════════════
+// WEBSOCKET (Socket.IO)
+// ═══════════════════════════════════════════════════════════════════════
+let socket = null;
+function initWebSocket() {
+  try {
+    socket = io({
+      transports: ['websocket', 'polling'],
+      reconnection: true,
+      reconnectionDelay: 3000,
+      auth: { token: getToken() }
+    });
+    socket.on('connect', function() {
+      logTerminal('WS', 'Connected', 'ok');
+    });
+    socket.on('disconnect', function() {
+      logTerminal('WS', 'Disconnected', 'err');
+    });
+    socket.on('positions_update', function(data) {
+      updatePositionsTable(data.positions);
+      logTerminal('WS', 'Positions updated', 'ok');
+    });
+    socket.on('balance_update', function(data) {
+      document.getElementById('topBalance').textContent = '$' + (data.total || 0).toLocaleString('en-US', {minimumFractionDigits: 2});
+      document.getElementById('statBalance').textContent = '$' + (data.total || 0).toLocaleString('en-US', {minimumFractionDigits: 0});
+    });
+    socket.on('pnl_update', function(data) {
+      const el = document.getElementById('topPnL');
+      el.textContent = (data.daily_pnl >= 0 ? '+' : '') + '$' + (data.daily_pnl || 0).toFixed(2);
+      el.className = 'val ' + (data.daily_pnl >= 0 ? 'pos' : 'neg');
+    });
+  } catch (e) {
+    console.error('WebSocket init error:', e);
+    logTerminal('WS', 'Init failed, using polling fallback', 'err');
+  }
+}
 
-// Initial load
+// ═══════════════════════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════════════════════
+loadExchanges();
 loadData();
-setInterval(loadData, 30000);
+startAdaptivePolling();
+initWebSocket();
 </script>
-
 </body>
 </html>
