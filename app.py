@@ -849,6 +849,9 @@ class TradingEngine:
         self.ema_strategy = EMAStrategy()
         self.clients = {}
         self._last_pnl_reset = datetime.now(timezone.utc).date()
+        # Klines cache: { (exchange_id, symbol, interval): (timestamp, data) }
+        self._klines_cache = {}
+        self._klines_cache_ttl = 240  # 4 minutes (slightly less than 4h timeframe)
 
     def _get_client(self, user_id, exchange_id):
         cache_key = f"{user_id}_{exchange_id}"
@@ -858,6 +861,29 @@ class TradingEngine:
         if client:
             self.clients[cache_key] = client
         return client
+
+    def _get_cached_klines(self, client, exchange_id, symbol, interval, limit):
+        """Get klines with caching and rate limit protection."""
+        cache_key = (exchange_id, symbol, interval)
+        now = time.time()
+
+        # Check cache
+        if cache_key in self._klines_cache:
+            cached_time, cached_data = self._klines_cache[cache_key]
+            if now - cached_time < self._klines_cache_ttl:
+                logger.info(f"Using cached klines for {symbol} (age={int(now-cached_time)}s)")
+                return cached_data
+
+        # Fetch fresh data
+        klines_data = client.get_klines(symbol, interval=interval, limit=limit)
+
+        # Store in cache
+        self._klines_cache[cache_key] = (now, klines_data)
+
+        # Rate limit protection: sleep 300ms between requests
+        time.sleep(0.3)
+
+        return klines_data
 
     def start(self):
         if self.running:
@@ -874,15 +900,13 @@ class TradingEngine:
         logger.info("Trading Engine stopped")
 
     def _run_loop(self):
-        logger.info("Engine loop started")
         while self.running:
             try:
                 with self.app.app_context():
-                    logger.info("Engine tick: checking daily reset + processing users")
                     self._check_daily_reset()
                     self._process_all_users()
             except Exception as e:
-                logger.error(f"Engine loop error: {e}", exc_info=True)
+                logger.error(f"Engine loop error: {e}")
             time.sleep(60)
 
     def _check_daily_reset(self):
@@ -894,44 +918,31 @@ class TradingEngine:
 
     def _process_all_users(self):
         users = User.query.filter_by(is_active=True).all()
-        logger.info(f"Found {len(users)} active users")
         for user in users:
             try:
-                logger.info(f"Processing user {user.id}")
                 self._process_user(user.id)
             except Exception as e:
-                logger.error(f"Error processing user {user.id}: {e}", exc_info=True)
+                logger.error(f"Error processing user {user.id}: {e}")
 
     def _process_user(self, user_id):
-        logger.info(f"_process_user called for {user_id}")
         exchanges = ExchangeManager.get_user_exchanges(user_id)
-        logger.info(f"Found {len(exchanges)} exchanges for user {user_id}")
         for ex in exchanges:
             if not ex.get('is_active'):
-                logger.info(f"Exchange {ex['name']} (ID:{ex['id']}) inactive, skipping")
                 continue
             exchange_id = ex['id']
-            logger.info(f"Getting client for exchange {exchange_id}")
             client = self._get_client(user_id, exchange_id)
             if not client:
-                logger.warning(f"No client for exchange {exchange_id}")
                 continue
             try:
-                logger.info(f"Getting balance for {ex['name']}...")
                 balance_data = client.get_balance()
-                logger.info(f"Balance raw for {ex['name']}: {str(balance_data)[:200]}")
                 balance = parse_balance(balance_data, ex['name'])
-                logger.info(f"Balance for {ex['name']}: {balance}")
 
-                logger.info(f"Getting positions for {ex['name']}...")
                 positions_data = client.get_positions()
                 self._sync_positions(user_id, exchange_id, positions_data, ex['name'])
 
-                logger.info(f"Starting analysis for {ex['name']} (balance={balance})")
                 self._analyze_and_trade(user_id, exchange_id, client, balance, ex['name'])
-                logger.info(f"Analysis complete for {ex['name']}")
             except Exception as e:
-                logger.error(f"Error processing exchange {exchange_id} for user {user_id}: {e}", exc_info=True)
+                logger.error(f"Error processing exchange {exchange_id} for user {user_id}: {e}")
 
     def _sync_positions(self, user_id, exchange_id, data, exchange_name):
         try:
@@ -981,55 +992,38 @@ class TradingEngine:
 
     def _analyze_and_trade(self, user_id, exchange_id, client, balance, exchange_name):
         symbols = ['BTC-USDT', 'ETH-USDT', 'SOL-USDT', 'AVAX-USDT', 'LINK-USDT', 'DOT-USDT', 'XRP-USDT', 'ADA-USDT']
-        logger.info(f"Analyzing {len(symbols)} symbols for {exchange_name}, balance={balance}")
         for symbol in symbols:
             try:
-                logger.info(f"Fetching klines for {symbol}...")
                 klines_data = client.get_klines(symbol, interval='4h', limit=100)
-                logger.info(f"Klines raw for {symbol}: type={type(klines_data).__name__}, sample={str(klines_data)[:200]}")
-
                 if not isinstance(klines_data, dict):
-                    logger.warning(f"Klines invalid type for {symbol}: {type(klines_data).__name__}")
+                    logger.warning(f"Klines invalid type for {symbol}: {type(klines_data)} = {klines_data}")
                     continue
                 if 'error' in klines_data:
                     logger.warning(f"Klines API error for {symbol}: {klines_data['error']}")
                     continue
 
+                # FIX: Use universal parse_klines instead of parse_klines_bingx
                 candles = parse_klines(klines_data, exchange_name)
-                logger.info(f"Parsed {len(candles)} candles for {symbol}")
 
                 if not candles:
                     logger.info(f"No candles for {symbol}, skipping")
                     continue
                 signal = self.ema_strategy.analyze(candles)
-                logger.info(f"Signal for {symbol}: {signal['signal']} (confidence={signal.get('confidence', 0)}, price={signal.get('price', 0)})")
-
                 if signal['signal'] != 'NEUTRAL' and signal['confidence'] > 50:
-                    logger.info(f"EXECUTING signal for {symbol}: {signal['signal']}")
                     self._execute_signal(user_id, exchange_id, client, symbol, signal, balance, exchange_name)
-                else:
-                    logger.info(f"Signal filtered for {symbol}: neutral or low confidence")
             except Exception as e:
-                logger.error(f"Analysis error for {symbol}: {type(e).__name__}: {e}", exc_info=True)
+                logger.error(f"Analysis error for {symbol}: {type(e).__name__}: {e}")
 
     def _execute_signal(self, user_id, exchange_id, client, symbol, signal, balance, exchange_name):
         side = signal['signal']
         current_price = signal['price']
-        logger.info(f"EXECUTE: {side} {symbol} @ {current_price}, balance={balance}")
-
         current_positions = Position.query.filter_by(
             user_id=user_id, exchange_id=exchange_id, status='OPEN'
         ).count()
-        logger.info(f"Current positions: {current_positions}")
-
         position_size = balance * 0.02
-        logger.info(f"Position size: {position_size}")
-
         can_trade, reason = self.risk_manager.can_open_position(
             balance, position_size, current_positions
         )
-        logger.info(f"Risk check: {can_trade}, reason={reason}")
-
         if not can_trade:
             logger.info(f"Risk block: {reason}")
             return
